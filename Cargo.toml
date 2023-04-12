@@ -1,0 +1,23 @@
+[package]
+name = "rmd160-circuits"
+authors = ["xgao@zoyoe.com"]
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "mylib"
+path = "src/lib.rs"
+
+[dependencies]
+strum = "0.24.1"
+strum_macros = "0.24.1"
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02" }
+num-bigint = { version = "0.4", features = ["rand"] }
+rand = "0.8"
+ark-std = { version = "0.3.0", features = ["print-trace"] }
+serde = { version = "1.0.152", features = ["serde_derive"] }
+serde_json = "1.0.93"
+subtle = "2.4"
+lazy_static = "1.4.0"
