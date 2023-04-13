@@ -1,3 +1,50 @@
+use halo2_proofs::arithmetic::FieldExt;
+use halo2_proofs::circuit::AssignedCell;
+
+pub fn field_to_u32<F: FieldExt>(f: &F) -> u32 {
+    f.get_lower_32() 
+}
+
+pub fn field_to_u64<F: FieldExt>(f: &F) -> u64 {
+    let bytes = f.get_lower_128().to_le_bytes();
+    u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+}
+
+pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
+    let mut rem = v;
+    let mut r = vec![];
+    for _ in 0..4 {
+        r.append(&mut vec![F::from((rem % 256) as u64)]);
+        rem = rem/256;
+    }
+    r.try_into().unwrap()
+}
+
+/* FIXME should not get value based on cell in new halo2 */
+pub fn cell_to_value<F: FieldExt>(cell: &AssignedCell<F, F>) -> F {
+    //cell.value().map_or(0, |x| field_to_u32(x))
+    let mut r = F::zero();
+    cell.value().map(|x| { r = *x });
+    r
+}
+
+
+
+/* FIXME should not get value based on cell in new halo2 */
+pub fn cell_to_u32<F: FieldExt>(cell: &AssignedCell<F, F>) -> u32 {
+    //cell.value().map_or(0, |x| field_to_u32(x))
+    let mut r = 0;
+    cell.value().map(|x| { r = field_to_u32(x) });
+    r
+}
+
+pub fn cell_to_limbs<F: FieldExt>(cell: &AssignedCell<F, F>) -> [F; 4] {
+    let a = cell_to_u32(cell);
+    u32_to_limbs(a)
+}
+
+
+
 #[macro_export]
 macro_rules! curr {
     ($meta: expr, $x: expr) => {
