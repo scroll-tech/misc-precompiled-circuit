@@ -129,9 +129,9 @@ impl GateCell {
     fn x() -> Self { Self::adv(4,0, "x") }
     fn e() -> Self { Self::adv(5,0, "e") }
     fn blimb(i: usize) -> Self { Self::adv(1,i+1, format!("blimb{}",i).as_str()) }
-    fn climb(i: usize) -> Self { Self::adv(2,i+1, format!("blimb{}",i).as_str()) }
-    fn dlimb(i: usize) -> Self { Self::adv(3,i+1, format!("blimb{}",i).as_str()) }
-    fn rlimb(i: usize) -> Self { Self::adv(4,i+1, format!("blimb{}",i).as_str()) }
+    fn climb(i: usize) -> Self { Self::adv(2,i+1, format!("climb{}",i).as_str()) }
+    fn dlimb(i: usize) -> Self { Self::adv(3,i+1, format!("dlimb{}",i).as_str()) }
+    fn rlimb(i: usize) -> Self { Self::adv(4,i+1, format!("rlimb{}",i).as_str()) }
     fn w1_h() -> Self { Self::adv(5,1, "w1h") }
     fn w1_l() -> Self { Self::adv(5,2, "w1l") }
     fn a_next() -> Self { Self::adv(5,3, "anext") }
@@ -197,20 +197,25 @@ impl<F: FieldExt> RMD160Chip<F> {
 
         let config = RMD160Config { fixed, selector, witness };
 
-        /*
         cs.create_gate("sum with bound", |meta| {
             let mut sum_r = config.get_expr(meta, GateCell::rlimb(0));
             for i in 1..4 {
-                let limb = config.get_expr(meta, GateCell::rlimb(1));
+                let limb = config.get_expr(meta, GateCell::rlimb(i));
                 sum_r = sum_r + limb * F::from(1u64 << (8*i));
             }
             let w0 = config.get_expr(meta, GateCell::w0());
+            let wb = config.get_expr(meta, GateCell::wb());
+            let wc = config.get_expr(meta, GateCell::wc());
             let a = config.get_expr(meta, GateCell::a());
             let x = config.get_expr(meta, GateCell::x());
             let offset = config.get_expr(meta, GateCell::offset());
-            vec![w0 - sum_r - a - x - offset]
+            let hsel = config.get_expr(meta, GateCell::hsel(0));
+            vec![
+                (wb.clone() - sum_r - a - x - offset) * hsel.clone(),
+                //(wc.clone()*(wc.clone() - constant!(F::one()))) * hsel.clone(),
+                (w0 + wc * F::from(1u64 << 32) - wb) * hsel,
+            ] 
         });
-        */
 
         cs.create_gate("sum with w1 rol4", |meta| {
             let a_next = config.get_expr(meta, GateCell::a_next());
@@ -300,7 +305,6 @@ impl<F: FieldExt> RMD160Chip<F> {
         let b = self.bind_cell(region, start_offset, GateCell::b(), &previous[1])?;
         self.bind_cell(region, start_offset, GateCell::c(), &previous[2])?;
         let d = self.bind_cell(region, start_offset, GateCell::d(), &previous[3])?;
-        self.bind_cell(region, start_offset, GateCell::e(), &previous[4])?;
         let e = self.bind_cell(region, start_offset, GateCell::e(), &previous[4])?;
 
         self.bind_cell(region, start_offset, GateCell::x(), &input)?;
@@ -335,8 +339,20 @@ impl<F: FieldExt> RMD160Chip<F> {
 
         let witness = get_witnesses(round, &rol, cell_to_u32(&input), shift[round][index], offset[round], pround);
         //self.assign_cell(region, start_offset, GateCell::r(), F::from(witness.r as u64));
+        //
+        self.assign_cell(region, start_offset, GateCell::offset(), F::from(offset[round] as u64))?;
         let rlimbs = u32_to_limbs(witness.r);
+
+        let mut sum_r = rlimbs[0];
+        for i in 1..4 {
+            sum_r = sum_r + rlimbs[i] * F::from(1u64 << (8*i));
+        }
+
+        assert!(sum_r == F::from(witness.r as u64));
+
         assert!(witness.w2b == F::from(witness.w1 as u64) + F::from(cell_to_u32(&previous[4]) as u64));
+        assert!(witness.wb == F::from(witness.r as u64) + F::from(cell_to_u32(&previous[0]) as u64)
+                + F::from(cell_to_u32(&input) as u64) + F::from(offset[round] as u64));
         for i in 0..4 {
             self.assign_cell(region, start_offset, GateCell::rlimb(i), rlimbs[i])?;
         }
@@ -392,7 +408,6 @@ impl<F: FieldExt> RMD160Chip<F> {
                     }
                 }
 
-                /*
                 let mut r2 = start_buf.clone();
                 for round in 0..5 {
                     for index in 0..16 {
@@ -410,7 +425,6 @@ impl<F: FieldExt> RMD160Chip<F> {
                         start_offset += 5;
                     }
                 }
-                */
                 Ok(())
             }
         )?;
