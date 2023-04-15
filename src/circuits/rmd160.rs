@@ -38,7 +38,7 @@ pub struct RMD160Chip<F: FieldExt> {
  * | h_sel | r_sel | col0| col1  | col2 | col3 | col4 | col5  | col6   |  fix0     |
  * | h_sel | r_sel | a   | b     | c    |  d   | x    | e     | c_next |  offset   |
  * |       |       | w0  | b0    | c0   |  d0  | r0   | w1_h  | w4_h   |  w1_r     |
- * |       |       | wb  | b1    | c1   |  d1  | r1   | w1_l  | w4_l   |  w4_r     |
+ * |       |       | wb  | b1    | c1   |  d1  | r1   | w1_l  | w4_l   |  w1_rr    |
  * |       |       | wc  | b2    | c2   |  d2  | r2   | a_next| w2b    |           |
  * |       |       | w1  | b3    | c3   |  d3  | r3   |       | w2c    |           |
  * 
@@ -69,8 +69,8 @@ fn get_witnesses<F: FieldExt>(round: usize, rol: &[u32; 5], x: u32, shift: u32, 
     let wb = F::from(r as u64) + F::from(rol[0] as u64) + F::from(x as u64) + F::from(offset as u64);
     let wc = (field_to_u64(&wb) - (w0 as u64)) >> 32;
     let w1 = w0.rotate_left(shift);
-    let w1_h = w1 >> (32 - shift);
-    let w1_l = w1 % (2u32.pow(shift));
+    let w1_h = w0 >> (32 - shift);
+    let w1_l = w0 % (2u32.pow(32 - shift));
     let a_next = w1.wrapping_add(rol[4]);
     let w2b = F::from(w1 as u64) + F::from(rol[4] as u64);
     let w2c = (field_to_u64(&w2b) - (a_next as u64)) >> 32;
@@ -115,7 +115,7 @@ impl GateCell {
     fn rsel(i: usize) -> Self { Self::sel(1,i, format!("hsel{}", i).as_str()) }
     fn offset() -> Self { Self::fix(0,0, "offset") }
     fn w1_r() -> Self { Self::fix(0, 1, "w1r") }
-    fn w4_r() -> Self { Self::fix(0, 2, "w4r") }
+    fn w1_rr() -> Self { Self::fix(0, 2, "w1rr") }
 
     fn a() -> Self { Self::adv(0,0, "a") }
     fn w0() -> Self { Self::adv(0,1, "w0") }
@@ -230,6 +230,70 @@ impl<F: FieldExt> RMD160Chip<F> {
                 (a_next + w2c * F::from(1u64 << 32) - w2b) * hsel,
             ]
         });
+
+        cs.create_gate("limbs sum", |meta| {
+            let hsel = config.get_expr(meta, GateCell::hsel(0));
+
+            let b = config.get_expr(meta, GateCell::b());
+            let mut sum_b = config.get_expr(meta, GateCell::blimb(0));
+            for i in 1..4 {
+                let limb = config.get_expr(meta, GateCell::blimb(i));
+                sum_b = sum_b + limb * F::from(1u64 << (8*i));
+            }
+
+            let c = config.get_expr(meta, GateCell::c());
+            let mut sum_c = config.get_expr(meta, GateCell::climb(0));
+            for i in 1..4 {
+                let limb = config.get_expr(meta, GateCell::climb(i));
+                sum_c = sum_c + limb * F::from(1u64 << (8*i));
+            }
+
+            let d = config.get_expr(meta, GateCell::d());
+            let mut sum_d = config.get_expr(meta, GateCell::dlimb(0));
+            for i in 1..4 {
+                let limb = config.get_expr(meta, GateCell::dlimb(i));
+                sum_d = sum_d + limb * F::from(1u64 << (8*i));
+            }
+
+            vec![
+                (sum_b - b) * hsel.clone(),
+                (sum_c - c) * hsel.clone(),
+                (sum_d - d) * hsel.clone(),
+            ]
+        });
+
+        cs.create_gate("c rotate", |meta| {
+            let hsel = config.get_expr(meta, GateCell::hsel(0));
+
+            let c = config.get_expr(meta, GateCell::c());
+            let c_next = config.get_expr(meta, GateCell::c_next());
+            let w4l = config.get_expr(meta, GateCell::w4_l());
+            let w4h = config.get_expr(meta, GateCell::w4_h());
+
+            vec![
+                (w4h.clone() * constant!(F::from(1u64 << 22)) + w4l.clone() - c.clone()) * hsel.clone(),
+                (w4l * constant!(F::from(1u64 << 10)) + w4h - c_next.clone()) * hsel.clone(),
+            ]
+        });
+
+        cs.create_gate("w0 rotate", |meta| {
+            let hsel = config.get_expr(meta, GateCell::hsel(0));
+
+            let w0 = config.get_expr(meta, GateCell::w0());
+            let w1 = config.get_expr(meta, GateCell::w1());
+            let w1l = config.get_expr(meta, GateCell::w1_l());
+            let w1h = config.get_expr(meta, GateCell::w1_h());
+            let shift = config.get_expr(meta, GateCell::w1_r());
+            let shift2 = config.get_expr(meta, GateCell::w1_rr());
+
+            vec![
+                (w1h.clone() * shift2.clone() + w1l.clone() - w0) * hsel.clone(),
+                (w1l * shift + w1h - w1) * hsel.clone(),
+            ]
+        });
+
+
+
         config
 
     }
@@ -310,7 +374,7 @@ impl<F: FieldExt> RMD160Chip<F> {
         self.bind_cell(region, start_offset, GateCell::x(), &input)?;
 
         self.assign_cell(region, start_offset, GateCell::w1_r(), F::from(1u64 << shift[round][index]))?;
-        self.assign_cell(region, start_offset, GateCell::w4_r(), F::from(1u64 << 10))?;
+        self.assign_cell(region, start_offset, GateCell::w1_rr(), F::from(1u64 << (32 - shift[round][index])))?;
 
         let blimbs = cell_to_limbs(&previous[1]);
         for i in 0..4 {
