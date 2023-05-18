@@ -1,5 +1,17 @@
 use halo2_proofs::arithmetic::FieldExt;
 use halo2_proofs::circuit::AssignedCell;
+use num_bigint::BigUint;
+
+pub fn field_to_bn<F: FieldExt>(f: &F) -> BigUint {
+    let bytes = f.to_repr();
+    BigUint::from_bytes_le(bytes.as_ref())
+}
+
+pub fn bn_to_field<F: FieldExt>(bn: &BigUint) -> F {
+    let mut bytes = bn.to_bytes_le();
+    bytes.resize(64, 0);
+    F::from_bytes_wide(&bytes.try_into().unwrap())
+}
 
 pub fn field_to_u32<F: FieldExt>(f: &F) -> u32 {
     f.get_lower_32() 
@@ -42,8 +54,6 @@ pub fn cell_to_limbs<F: FieldExt>(cell: &AssignedCell<F, F>) -> [F; 4] {
     let a = cell_to_u32(cell);
     u32_to_limbs(a)
 }
-
-
 
 #[macro_export]
 macro_rules! curr {

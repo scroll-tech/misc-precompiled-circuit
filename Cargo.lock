@@ -221,6 +221,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "halo2-gate-generator"
+version = "0.1.0"
+source = "git+https://github.com/DelphinusLab/halo2gategen.git?branch=main#d1bfe278d5a8a7f5f561f0b3f73099c73ac93ead"
+dependencies = [
+ "ark-std",
+ "halo2_proofs",
+ "lazy_static",
+ "num-bigint",
+ "rand",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "subtle",
+]
+
+[[package]]
 name = "halo2_proofs"
 version = "0.2.0"
 source = "git+https://github.com/privacy-scaling-explorations/halo2.git?tag=v2023_02_02#0a8646b78286a13d320759b1c585262d6536dce4"
@@ -473,6 +490,7 @@ name = "rmd160-circuits"
 version = "0.1.0"
 dependencies = [
  "ark-std",
+ "halo2-gate-generator",
  "halo2_proofs",
  "lazy_static",
  "num-bigint",
