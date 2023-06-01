@@ -2,6 +2,8 @@
 
 Define misc precompiled circuits including rmd160 and modexp. Try to unify the range check components so that all circuits only depends on one columns for range check.
 
+Notice: the modexp circuit only supports U256 instead of arbitrary lengeth bigint. This is a difference from EVM L1 behavior by design.
+
 # Generic $(a^b)_p$ over $\mathbb{F}_r$ in Halo2
 
 ## I. Representation of $u256$ values in $F_r$
