@@ -396,7 +396,7 @@ impl<F: FieldExt> RMD160Chip<F> {
         &self,
         region: &mut Region<F>,
         start_offset: usize,
-        cell: GateCell, 
+        cell: GateCell,
         value: &AssignedCell<F, F>,
     ) -> Result<AssignedCell<F, F>, Error> {
         let f = cell_to_value(value);

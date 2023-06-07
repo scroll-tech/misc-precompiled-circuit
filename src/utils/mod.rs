@@ -14,7 +14,7 @@ pub fn bn_to_field<F: FieldExt>(bn: &BigUint) -> F {
 }
 
 pub fn field_to_u32<F: FieldExt>(f: &F) -> u32 {
-    f.get_lower_32() 
+    f.get_lower_32()
 }
 
 pub fn field_to_u64<F: FieldExt>(f: &F) -> u64 {
@@ -131,3 +131,12 @@ macro_rules! constant {
         halo2_proofs::plonk::Expression::Constant($x)
     };
 }
+
+#[macro_export]
+macro_rules! value_for_assign {
+    ($x: expr) => {
+        halo2_proofs::circuit::Value::known($x)
+    };
+}
+
+
