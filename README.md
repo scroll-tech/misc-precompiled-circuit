@@ -9,11 +9,10 @@ Notice: the modexp circuit only supports U256 instead of arbitrary lengeth bigin
 ## I. Representation of $u256$ values in $F_r$
 Suppose that for each $x$, $x \in [0, 2^{256}-1]$. We represent $a$ as a vector of three $\mathbb{F}_r$ limbs $[x_0, x_1, x_2]$ such that $x_0 \le 2^{108}$, $x_1 \le 2^{108}$ and $x_2 \le 2^{108}$
 
-$$\langle x \rangle = 
-\underbrace{b_0,b_1, \cdots, b_{107}, }_{x_0}
-\underbrace{b_{108},b_{109},\cdots, b_{216}}_{x_1}
-\underbrace{b_{216},b_{217},\cdots, b_{255}}_{x_2}
-$$
+$\langle$ x $\rangle$ =
+$\underbrace{b_{0}  ,b_{1}  , \cdots, b_{107}}$ $\bigl( x_0 \bigr)$
+$\underbrace{b_{108},b_{109}, \cdots, b_{215}}$ $\bigl( x_1 \bigr)$
+$\underbrace{b_{216},b_{217}, \cdots, b_{255}}$ $\bigl( x_2 \bigr)$
 
 In addition we use $x_3$ to represent $x$ % $r$ and put them all together we represent $x = [x_0, x_1, x_2, x_3]$.
 
