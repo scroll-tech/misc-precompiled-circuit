@@ -223,7 +223,7 @@ dependencies = [
 [[package]]
 name = "halo2-gate-generator"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/halo2gategen.git?branch=main#d1bfe278d5a8a7f5f561f0b3f73099c73ac93ead"
+source = "git+https://github.com/DelphinusLab/halo2gategen.git?branch=main#4fd6b4793cfd590d1cc80ba463599280522f8bec"
 dependencies = [
  "ark-std",
  "halo2_proofs",

@@ -1,22 +1,23 @@
+use crate::utils::{
+    field_to_bn,
+    bn_to_field,
+};
+
 use halo2_gate_generator::{
     customized_circuits,
     customized_circuits_expand,
     table_item,
     item_count,
     GateCell,
+    value_for_assign,
 };
 
-use crate::utils::{
-    field_to_bn,
-    bn_to_field,
-};
 
 use crate::constant_from;
-
 use std::ops::Div;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{Region, AssignedCell, Value},
+    circuit::{Region, AssignedCell},
     plonk::{
         Fixed, Advice, Column, ConstraintSystem,
         Error, Expression, Selector, VirtualCells
@@ -38,7 +39,7 @@ customized_circuits!(RangeCheckConfig, 2, 3, 2, 0,
 
 impl RangeCheckConfig {
     /// register a column (col) to be range checked by limb size (sz)
-    pub fn register_column<F: FieldExt> (
+    pub fn register<F: FieldExt> (
         &self,
         cs: &mut ConstraintSystem<F>,
         col: impl FnOnce(&mut VirtualCells<F>) -> Expression<F>,
@@ -125,6 +126,7 @@ impl<F: FieldExt> RangeCheckChip<F> {
         config
     }
 
+    /// Make sure the (value, sz) pair is lookupable in the range_chip
     pub fn assign_value_with_range (
         &mut self,
         region: &mut Region<F>,
@@ -159,6 +161,8 @@ impl<F: FieldExt> RangeCheckChip<F> {
         Ok(())
     }
 
+    /// initialize the table column from 1 to 2^12
+    /// initialize needs to be called before using the range_chip
     pub fn initialize(
         &mut self,
         region: &mut Region<F>,
@@ -277,7 +281,7 @@ mod tests {
             let rangecheckconfig = RangeCheckChip::<Fr>::configure(meta);
             let helperconfig = HelperChip::configure(meta);
 
-            rangecheckconfig.register_column(
+            rangecheckconfig.register(
                 meta,
                 |c| helperconfig.range_check_column(c),
                 |_| Expression::Constant(Fr::from(4 as u64))
