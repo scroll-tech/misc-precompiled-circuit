@@ -44,23 +44,23 @@ pub struct ModExpChip<F:FieldExt> {
 
 #[derive(Clone, Debug)]
 pub struct Limb<F: FieldExt> {
-    cell: Option<AssignedCell<F, F>>,
-    value: F
+    pub cell: Option<AssignedCell<F, F>>,
+    pub value: F
 }
 
 impl<F: FieldExt> Limb<F> {
-    fn new(cell: Option<AssignedCell<F, F>>, value: F) -> Self {
+    pub fn new(cell: Option<AssignedCell<F, F>>, value: F) -> Self {
         Limb { cell, value }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Number<F: FieldExt> {
-    limbs: [Limb<F>; 4],
+    pub limbs: [Limb<F>; 4],
 }
 
 impl<F: FieldExt> Number<F> {
-    fn add(&self, n: &Self) -> Self {
+    pub fn add(&self, n: &Self) -> Self {
         Number {
             limbs: [
                 Limb::new(None, self.limbs[0].value + n.limbs[0].value),
@@ -70,7 +70,7 @@ impl<F: FieldExt> Number<F> {
             ]
         }
     }
-    fn from_bn(bn: &BigUint) -> Self {
+    pub fn from_bn(bn: &BigUint) -> Self {
         let limb0 = bn.modpow(&BigUint::from(1u128), &BigUint::from(1u128<<108));
         let limb1 = (bn - limb0.clone()).div(BigUint::from(1u128<<108)).modpow(&BigUint::from(1u128), &BigUint::from(1u128<<108));
         let limb2 = bn.div(BigUint::from(1u128<<108)).div(BigUint::from(1u128<<108));
@@ -85,7 +85,7 @@ impl<F: FieldExt> Number<F> {
 
         }
     }
-    fn to_bn(&self) -> BigUint {
+    pub fn to_bn(&self) -> BigUint {
         let limb0 = field_to_bn(&self.limbs[0].value);
         let limb1 = field_to_bn(&self.limbs[1].value);
         let limb2 = field_to_bn(&self.limbs[2].value);
@@ -706,13 +706,19 @@ impl<F: FieldExt> ModExpChip<F> {
         self.decompose_limb(region, range_check_chip, offset, &exp.limbs[2], &mut limbs, 40)?; //256 - 216 = 40
         self.decompose_limb(region, range_check_chip, offset, &exp.limbs[1], &mut limbs, 108)?;
         self.decompose_limb(region, range_check_chip, offset, &exp.limbs[0], &mut limbs, 108)?;
+        println!("offset decompose {}, get {} limbs", offset, limbs.len());
         let mut acc = self.assign_constant(region, range_check_chip, offset, Number::from_bn(&BigUint::from(1 as u128)), 0)?;
+        println!("offset constants {}", offset);
         let one = acc.clone();
         for limb in limbs {
             let v = self.select(region, range_check_chip, offset, &limb, &one, base)?;
+            //println!("offset sel {}", offset);
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
+            //println!("offset acc1 {}", offset);
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &v, modulus)?;
+            //println!("offset acc2 {}", offset);
         }
+        println!("offset calc {}", offset);
         Ok(acc)
     }
 }
@@ -888,8 +894,11 @@ mod tests {
                     let exp = helperchip.assign_exp(&mut region, &mut offset, &self.exp)?;
                     let modulus = helperchip.assign_modulus(&mut region, &mut offset, &self.modulus)?;
                     let bn_rem = self.base.clone().modpow(&self.exp, &self.modulus);
+                    println!("offset {}", offset);
                     let result = helperchip.assign_results(&mut region, &mut offset, &bn_rem)?;
+                    println!("offset helper {}", offset);
                     let rem = modexpchip.mod_exp(&mut region, &mut range_chip, &mut offset, &base, &exp, &modulus)?;
+                    println!("offset modexp {}", offset);
                     for i in 0..4 {
                         //println!("rem is {:?}, result is {:?}", &rem.limbs[i].value, &result.limbs[i].value);
                         //println!("rem cell is {:?}, result cell is {:?}", &rem.limbs[i].cell, &result.limbs[i].cell);
@@ -898,6 +907,7 @@ mod tests {
                             result.limbs[i].clone().cell.unwrap().cell()
                         )?;
                     }
+                    println!("offset final {}", offset);
                     Ok(())
                 }
             )?;
