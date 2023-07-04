@@ -1,8 +1,8 @@
 # Introduction
 
-Define misc precompiled circuits including rmd160 and modexp. Try to unify the range check components so that all circuits only depends on one columns for range check.
+Define misc precompiled circuits including rmd160 and modexp. Try to unify the range check components so that all circuits only depend on one column for range check.
 
-Notice: the modexp circuit only supports U256 instead of arbitrary lengeth bigint. This is a difference from EVM L1 behavior by design.
+Notice: the modexp circuit only supports U256 instead of arbitrary length bigint. This is a difference from EVM L1 behavior by design.
 
 # Generic $(a^b)_p$ over $\mathbb{F}_r$ in Halo2
 
@@ -37,7 +37,7 @@ $r$ is prime, $2^{216}$ has only one factor which is $2$ and $2^{108} - 1$ is an
 2. $\langle x \rangle_{d_1} = \langle [x_0, x_1, 0, 0]\rangle_{d_1}$
 3. $\langle x \rangle_{r} = x_3$
 
-### 4. Put it all together we get the follwing constraints.
+### 4. Put it all together we get the following constraints.
 * $(x_0 + x_1 + x_2)(y_0 + y_1 + y_2) \\ = (k_0 + k_1 + k_2) (p_0 + p_1 + p2) + d_0 + d_1 + d_2$ (modular $2^{108} - 1$)
 * $(x_0y_0 + 2^{108} (x_1y_0 + x_0y_1)) = (k_0p_0 + d_0 + 2^{108} (p_1k_0 + p_0k_1) + d1)$ (modular $2^{216}$)
 * $x_3y_3 = k_3p_3 + d_3$ (modular $r$)
