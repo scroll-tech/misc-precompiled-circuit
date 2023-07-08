@@ -2,22 +2,24 @@ use crate::utils::{
     field_to_bn,
     bn_to_field,
 };
-
 use halo2_gate_generator::{
     customized_circuits,
-    customized_circuits_expand,
     table_item,
     item_count,
-    GateCell,
+    customized_circuits_expand,
+    constant_from,
     value_for_assign,
+    GateCell,
+    Limb,
 };
-
-
-use crate::constant_from;
+use crate::circuits::{
+    LookupAssistConfig,
+    LookupAssistChip
+};
 use std::ops::Div;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{Region, AssignedCell},
+    circuit::Region,
     plonk::{
         Fixed, Advice, Column, ConstraintSystem,
         Error, Expression, Selector, VirtualCells
@@ -37,9 +39,9 @@ customized_circuits!(RangeCheckConfig, 2, 3, 2, 0,
    | nil    |  acc_n | rem_n | nil   | sel_n
 );
 
-impl RangeCheckConfig {
+impl LookupAssistConfig for RangeCheckConfig {
     /// register a column (col) to be range checked by limb size (sz)
-    pub fn register<F: FieldExt> (
+    fn register<F: FieldExt> (
         &self,
         cs: &mut ConstraintSystem<F>,
         col: impl FnOnce(&mut VirtualCells<F>) -> Expression<F>,
@@ -57,6 +59,17 @@ pub struct RangeCheckChip<F:FieldExt> {
     config: RangeCheckConfig,
     offset: usize,
     _marker: PhantomData<F>
+}
+
+impl<F:FieldExt> LookupAssistChip<F> for RangeCheckChip<F> {
+    fn provide_lookup_evidence (
+        &mut self,
+        region: &mut Region<F>,
+        value: F,
+        sz: u64,
+    ) -> Result<(), Error> {
+        self.assign_value_with_range(region, value, sz)
+    }
 }
 
 
@@ -131,7 +144,7 @@ impl<F: FieldExt> RangeCheckChip<F> {
         &mut self,
         region: &mut Region<F>,
         value: F,
-        sz: usize,
+        sz: u64,
     ) -> Result<(), Error> {
         let mut limbs = vec![];
         let mut bn = field_to_bn(&value);
@@ -196,6 +209,8 @@ mod tests {
         RangeCheckConfig,
     };
     use crate::value_for_assign;
+    use crate::circuits::LookupAssistConfig;
+
 
     #[derive(Clone, Debug)]
     pub struct HelperChipConfig {
