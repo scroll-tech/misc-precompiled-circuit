@@ -157,9 +157,9 @@ impl<F: FieldExt> RMD160Chip<F> {
 
         cs.create_gate("sum with bound", |meta| {
             let r0 = config.round_config.get_expr(meta, RoundGateConfig::r0());
-            let r1 = config.round_config.get_expr(meta, RoundGateConfig::r0());
-            let r2 = config.round_config.get_expr(meta, RoundGateConfig::r0());
-            let r3 = config.round_config.get_expr(meta, RoundGateConfig::r0());
+            let r1 = config.round_config.get_expr(meta, RoundGateConfig::r1());
+            let r2 = config.round_config.get_expr(meta, RoundGateConfig::r2());
+            let r3 = config.round_config.get_expr(meta, RoundGateConfig::r3());
             let sum_r = r0 + (r1 + (r2 + r3 * F::from(1u64 << 8)) * F::from(1u64 << 8)) * F::from(1u64 << 8);
             let w0 = config.round_config.get_expr(meta, RoundGateConfig::w0());
             let wb = config.round_config.get_expr(meta, RoundGateConfig::wb());
@@ -207,7 +207,7 @@ impl<F: FieldExt> RMD160Chip<F> {
             let c3 = config.round_config.get_expr(meta, RoundGateConfig::c3());
             let sum_c = c0 + (c1 + (c2 + c3 * F::from(1u64 << 8)) * F::from(1u64 << 8)) * F::from(1u64 << 8);
 
-            let d = config.round_config.get_expr(meta, RoundGateConfig::c());
+            let d = config.round_config.get_expr(meta, RoundGateConfig::d());
             let d0 = config.round_config.get_expr(meta, RoundGateConfig::d0());
             let d1 = config.round_config.get_expr(meta, RoundGateConfig::d1());
             let d2 = config.round_config.get_expr(meta, RoundGateConfig::d2());
