@@ -19,8 +19,7 @@ use halo2_gate_generator::{
 
 use halo2_proofs::{
     arithmetic::FieldExt,
-    arithmetic::Field,
-    circuit::{Region, AssignedCell},
+    circuit::Region,
     plonk::{
         Fixed, Advice, Column, ConstraintSystem,
         Error, Expression, Selector, VirtualCells
@@ -388,6 +387,84 @@ impl CommonGateConfig {
                 0
         )?;
         Ok(l[0].clone())
+    }
+
+    /// check if limb is equal to constant F
+    pub fn eq_constant<F: FieldExt, LC: LookupAssistChip<F>>(
+        &self,
+        region: &mut Region<F>,
+        lookup_assist_chip: &mut LC,
+        offset: &mut usize,
+        limb: &Limb<F>,
+        constant: &F,
+    ) -> Result<Limb<F>, Error> {
+        let delta = limb.value - constant;
+        // ((limb.value - constant) * r)
+        // ((inv * (limb.value - constant)) - (1-r))
+        let (inv, r) = if delta.is_zero_vartime() {
+            (F::one(), F::one())
+        } else {
+            (delta.invert().unwrap(), F::zero())
+        };
+        let diff = self.sum_with_constant(
+            region,
+            lookup_assist_chip,
+            offset,
+            vec![(limb, F::one())],
+            Some(-constant.clone()),
+        )?;
+        let r = self.assign_line(
+            region,
+            lookup_assist_chip,
+            offset,
+            [
+                Some(diff.clone()),
+                None,
+                None,
+                Some(Limb::new(None, r)),
+                None,
+                None,
+            ],
+            [
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(F::one()),
+                None,
+                None,
+            ],
+            0,
+        )?;
+        let r = r[1].clone();
+        let l = self.assign_line(
+            region,
+            lookup_assist_chip,
+            offset,
+            [
+                Some(Limb::new(None, inv)),
+                Some(r),
+                None,
+                Some(diff),
+                None,
+                None,
+            ],
+            [
+                None,
+                Some(F::one()),
+                None,
+                None,
+                None,
+                None,
+                Some(F::one()),
+                None,
+                Some(-F::one()),
+            ],
+            0,
+        )?;
+        Ok(l[1].clone())
     }
 
     fn sum_with_constant<F:FieldExt, LC:LookupAssistChip<F>>(

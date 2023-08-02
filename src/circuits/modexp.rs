@@ -523,7 +523,62 @@ impl<F: FieldExt> ModExpChip<F> {
         Ok(())
     }
 
+    pub fn number_is_zero(
+        &self,
+        region: &mut Region<F>,
+        range_check_chip: &mut RangeCheckChip<F>,
+        offset: &mut usize,
+        number: &Number<F>,
+    ) -> Result<Limb<F>, Error> {
+        let zero = F::zero();
+        let limb0_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+        let limb1_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+        let limb2_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+        // all the above zero flat is either zero or one thus bounded
+        // thus check all of them are 1 equals to check the sum of them are 3
+        let sum = self.config.assign_line(region, range_check_chip, offset,
+            [
+                Some(limb0_zero.clone()),
+                Some(limb1_zero.clone()),
+                Some(limb2_zero.clone()),
+                None,
+                Some(Limb::new(None, limb0_zero.value + limb1_zero.value + limb2_zero.value)),
+                None,
+            ],
+            [Some(F::one()), Some(F::one()), Some(F::one()), None, Some(-F::one()), None, None, None, None],
+            0,
+        )?[3].clone();
+        self.config.eq_constant(region, range_check_chip, offset, &sum, &zero)
+    }
+
     pub fn mod_mult(
+        &self,
+        region: &mut Region<F>,
+        range_check_chip: &mut RangeCheckChip<F>,
+        offset: &mut usize,
+        lhs: &Number<F>,
+        rhs: &Number<F>,
+        modulus: &Number<F>,
+    ) -> Result<Number<F>, Error> {
+        let one = self.assign_number(
+            region,
+            range_check_chip,
+            offset,
+            Number::from_bn(&BigUint::from(1u128))
+        )?;
+        let zero = self.assign_number(
+            region,
+            range_check_chip,
+            offset,
+            Number::from_bn(&BigUint::from(0u128))
+        )?;
+        let is_zero = self.number_is_zero(region, range_check_chip, offset, modulus)?;
+        let modulus_mock = self.select(region, range_check_chip, offset, &is_zero, modulus, &one)?;
+        let r = self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
+        self.select(region, range_check_chip, offset, &is_zero, &zero, &r)
+    }
+
+    pub fn mod_mult_unsafe(
         &self,
         region: &mut Region<F>,
         range_check_chip: &mut RangeCheckChip<F>,
