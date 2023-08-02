@@ -1,8 +1,7 @@
-use halo2_gate_generator::Limb;
 use crate::utils::{bn_to_field, field_to_bn};
+use halo2_gate_generator::Limb;
 
 use crate::circuits::CommonGateConfig;
-
 
 use crate::circuits::range::{RangeCheckChip, RangeCheckConfig};
 
@@ -534,28 +533,50 @@ impl<F: FieldExt> ModExpChip<F> {
         let zero = F::zero();
         let three = F::from(3u64);
         // limb0_zero is 0 if not zero, 1 if zero
-        let limb0_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
-        let limb1_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
-        let limb2_zero = self.config.eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
-        println!("limb0_zero {:?}, limb1_zero {:?}, limb2_zero {:?}", limb0_zero.value,limb1_zero,
-            limb2_zero.value);
+        let limb0_zero =
+            self.config
+                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+        let limb1_zero =
+            self.config
+                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+        let limb2_zero =
+            self.config
+                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+
         // all the above zero flat is either zero or one thus bounded
         // thus check all of them are 1 equals to check the sum of them are 3
-        let sum: Limb<F> = self.config.assign_line(region, range_check_chip, offset,
+        let sum: Limb<F> = self.config.assign_line(
+            region,
+            range_check_chip,
+            offset,
             [
                 Some(limb0_zero.clone()),
                 Some(limb1_zero.clone()),
                 Some(limb2_zero.clone()),
                 None,
-                Some(Limb::new(None, limb0_zero.value + limb1_zero.value + limb2_zero.value)),
+                Some(Limb::new(
+                    None,
+                    limb0_zero.value + limb1_zero.value + limb2_zero.value,
+                )),
                 None,
             ],
-            [Some(F::one()), Some(F::one()), Some(F::one()), None, Some(-F::one()), None, None, None, None],
+            [
+                Some(F::one()),
+                Some(F::one()),
+                Some(F::one()),
+                None,
+                Some(-F::one()),
+                None,
+                None,
+                None,
+                None,
+            ],
             0,
-        )?[3].clone();
-        // self.config.eq_constant(region, range_check_chip, offset, &sum, &three)
-        let is_zero = self.config.eq_constant(region, range_check_chip, offset, &sum, &three)?;
-        println!("is_zero is {:?}", is_zero.value);
+        )?[3]
+            .clone();
+        let is_zero = self
+            .config
+            .eq_constant(region, range_check_chip, offset, &sum, &three)?;
         Ok(is_zero)
     }
 
@@ -572,19 +593,19 @@ impl<F: FieldExt> ModExpChip<F> {
             region,
             range_check_chip,
             offset,
-            Number::from_bn(&BigUint::from(1u128))
+            Number::from_bn(&BigUint::from(1u128)),
         )?;
         let zero = self.assign_number(
             region,
             range_check_chip,
             offset,
-            Number::from_bn(&BigUint::from(0u128))
+            Number::from_bn(&BigUint::from(0u128)),
         )?;
         let is_zero = self.number_is_zero(region, range_check_chip, offset, modulus)?;
-        println!("is_zero in mod_mult {:?}", is_zero.value);
-        let modulus_mock: Number<F> = self.select(region, range_check_chip, offset, &is_zero, &one, &modulus)?;
-        println!("modulus_mock is {:?}", modulus_mock.limbs);
-        let r: Number<F> = self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
+        let modulus_mock: Number<F> =
+            self.select(region, range_check_chip, offset, &is_zero, &one, &modulus)?;
+        let r: Number<F> =
+            self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
         self.select(region, range_check_chip, offset, &is_zero, &zero, &r)
     }
 
@@ -783,12 +804,12 @@ impl<F: FieldExt> ModExpChip<F> {
 #[cfg(test)]
 mod tests {
     use crate::circuits::range::{RangeCheckChip, RangeCheckConfig};
+    use crate::circuits::CommonGateConfig;
     use crate::value_for_assign;
+    use halo2_gate_generator::Limb;
     use halo2_proofs::dev::MockProver;
     use halo2_proofs::halo2curves::bn256::Fr;
     use num_bigint::BigUint;
-    use crate::circuits::CommonGateConfig;
-    use halo2_gate_generator::Limb;
 
     use halo2_proofs::{
         circuit::{Chip, Layouter, Region, SimpleFloorPlanner},
@@ -1511,11 +1532,10 @@ mod tests {
         Ok(())
     }
 
-    fn run_mod_mult_circuit_zero() -> Result<(), CircuitError> {
+    fn run_mod_mult_circuit_zero_modulus() -> Result<(), CircuitError> {
         const NUM_TESTS: usize = 6;
         let mut bn_lhs_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let mut bn_rhs_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
-        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let bit_len_l: [usize; NUM_TESTS] = [
             1,
             4,
@@ -1532,31 +1552,26 @@ mod tests {
             LIMB_WIDTH + 36,
             LIMB_WIDTH + LIMB_WIDTH + 10,
         ]; // + 12 will error
-        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 12, 16, 20];
 
         for i in 0..NUM_TESTS {
             bn_lhs_test_vectors.push(get_random_x_bit_bn(bit_len_l[i]));
             bn_rhs_test_vectors.push(get_random_x_bit_bn(bit_len_r[i]));
-            bn_modulus_test_vectors.push(get_random_x_bit_bn(bit_len_m[i]));
         }
         for i in 0..NUM_TESTS {
             let lhs_testcase = bn_lhs_test_vectors[i].clone();
             let rhs_testcase = bn_rhs_test_vectors[i].clone();
-            let modulus_testcase = bn_modulus_test_vectors[i].clone();
 
             let bn_test_res = BigUint::from(0u128);
             println!(
-                "testcase: (0x{})*(0x{}) mod 0x{} = 0x{}",
+                "testcase: (0x{})*(0x{}) mod 0 = 0x{}",
                 lhs_testcase.clone().to_str_radix(16),
                 rhs_testcase.clone().to_str_radix(16),
-                modulus_testcase.clone().to_str_radix(16),
                 bn_test_res.to_str_radix(16)
             );
 
             let l = lhs_testcase.clone();
             let r = rhs_testcase.clone();
-            //let modulus = modulus_testcase.clone();
-            let modulus =  BigUint::from(0u128);
+            let modulus = BigUint::from(0u128);
 
             let test_circuit = TestModMultCircuit {
                 l,
@@ -1575,7 +1590,6 @@ mod tests {
         }
         Ok(())
     }
-
 
     fn run_modexp_circuit() -> Result<(), CircuitError> {
         // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
@@ -1638,7 +1652,6 @@ mod tests {
         Ok(())
     }
 
-
     fn run_modexp_zero_modulus_circuit() -> Result<(), CircuitError> {
         // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
         // Test will pass if:
@@ -1647,10 +1660,8 @@ mod tests {
         //  (2) prover.verify() for each run verifies without error.
         const NUM_TESTS: usize = 5;
         let mut bn_base_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
-        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let bit_len_b: [usize; NUM_TESTS] = [1, 4, 8, 10, 16];
-        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 16, 20];
         let bit_len_e: [usize; NUM_TESTS] = [
             //change for larger exp bit length.
             1,
@@ -1661,25 +1672,21 @@ mod tests {
         ];
         for i in 0..NUM_TESTS {
             bn_base_test_vectors.push(get_random_x_bit_bn(bit_len_b[i]));
-            bn_modulus_test_vectors.push(get_random_x_bit_bn(bit_len_m[i]));
             bn_exp_test_vectors.push(get_random_x_bit_bn(bit_len_e[i]));
         }
         for i in 0..NUM_TESTS {
-            let base_testcase = bn_base_test_vectors[i].clone();
-            let modulus_testcase = bn_modulus_test_vectors[i].clone();
+            let base_testcase: BigUint = bn_base_test_vectors[i].clone();
             let exp_testcase = bn_exp_test_vectors[i].clone();
             //let bn_test_res = big_pow(base_testcase.clone(), exp_testcase.clone()) % modulus_testcase.clone();
             let bn_test_res = BigUint::from(0u128);
             println!(
-                "testcase: (0x{})^(0x{}) mod 0x{} = 0x{}",
+                "testcase: (0x{})^(0x{}) mod 0 = 0x{}",
                 base_testcase.clone().to_str_radix(16),
                 exp_testcase.clone().to_str_radix(16),
-                modulus_testcase.clone().to_str_radix(16),
                 bn_test_res.to_str_radix(16)
             );
             let base = base_testcase.clone();
             let exp = exp_testcase.clone();
-            //let modulus = modulus_testcase.clone();
             let modulus = BigUint::from(0u128);
 
             let test_circuit = TestModExpCircuit {
@@ -1742,8 +1749,9 @@ mod tests {
     }
 
     #[test]
-    fn test_mod_mult_zero() {
-        let output = run_mod_mult_circuit_zero().expect("\nmod_mult_circuit failed prover verify");
+    fn test_mod_mult_zero_modulus() {
+        let output =
+            run_mod_mult_circuit_zero_modulus().expect("\nmod_mult_circuit failed prover verify");
         println!("\nproof generation successful!\nresult: {:#?}", output);
     }
 
@@ -1755,7 +1763,8 @@ mod tests {
 
     #[test]
     fn test_modexp_zero_modulus() {
-        let output = run_modexp_zero_modulus_circuit().expect("\nmodexp_circuit failed prover verify");
+        let output =
+            run_modexp_zero_modulus_circuit().expect("\nmodexp_circuit failed prover verify");
         println!("\nproof generation successful!\nresult: {:#?}", output);
     }
 
