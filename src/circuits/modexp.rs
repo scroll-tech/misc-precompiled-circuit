@@ -1094,7 +1094,7 @@ mod tests {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
-            let rangecheckconfig = RangeCheckChip::<Fr>::configure(meta);
+            let rangecheckconfig: RangeCheckConfig = RangeCheckChip::<Fr>::configure(meta);
             Self::Config {
                 modexpconfig: ModExpChip::<Fr>::configure(meta, &rangecheckconfig),
                 helperconfig: HelperChip::configure(meta),
@@ -1155,7 +1155,7 @@ mod tests {
                         &quo,
                         &modulus,
                     )?;
-                    let rem_mod_216 =
+                    let rem_mod_216: Limb<Fr> =
                         modexpchip.mod_power216(&mut region, &mut range_chip, &mut offset, &rem)?;
                     println!(
                         "rl_mod_108m1  {:?} = {:?} lr_mod_216",
@@ -1511,6 +1511,72 @@ mod tests {
         Ok(())
     }
 
+    fn run_mod_mult_circuit_zero() -> Result<(), CircuitError> {
+        const NUM_TESTS: usize = 6;
+        let mut bn_lhs_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_rhs_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let bit_len_l: [usize; NUM_TESTS] = [
+            1,
+            4,
+            8,
+            LIMB_WIDTH - 1,
+            LIMB_WIDTH + 1,
+            LIMB_WIDTH + LIMB_WIDTH + 1,
+        ];
+        let bit_len_r: [usize; NUM_TESTS] = [
+            1,
+            4,
+            8,
+            LIMB_WIDTH - 1,
+            LIMB_WIDTH + 36,
+            LIMB_WIDTH + LIMB_WIDTH + 10,
+        ]; // + 12 will error
+        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 12, 16, 20];
+
+        for i in 0..NUM_TESTS {
+            bn_lhs_test_vectors.push(get_random_x_bit_bn(bit_len_l[i]));
+            bn_rhs_test_vectors.push(get_random_x_bit_bn(bit_len_r[i]));
+            bn_modulus_test_vectors.push(get_random_x_bit_bn(bit_len_m[i]));
+        }
+        for i in 0..NUM_TESTS {
+            let lhs_testcase = bn_lhs_test_vectors[i].clone();
+            let rhs_testcase = bn_rhs_test_vectors[i].clone();
+            let modulus_testcase = bn_modulus_test_vectors[i].clone();
+
+            let bn_test_res = BigUint::from(0u128);
+            println!(
+                "testcase: (0x{})*(0x{}) mod 0x{} = 0x{}",
+                lhs_testcase.clone().to_str_radix(16),
+                rhs_testcase.clone().to_str_radix(16),
+                modulus_testcase.clone().to_str_radix(16),
+                bn_test_res.to_str_radix(16)
+            );
+
+            let l = lhs_testcase.clone();
+            let r = rhs_testcase.clone();
+            //let modulus = modulus_testcase.clone();
+            let modulus =  BigUint::from(0u128);
+
+            let test_circuit = TestModMultCircuit {
+                l,
+                r,
+                modulus,
+                bn_test_res,
+            };
+            let prover = match MockProver::run(16, &test_circuit, vec![]) {
+                Ok(prover) => prover,
+                Err(e) => panic!("{:#?}", e),
+            };
+            match prover.verify() {
+                Ok(_) => (),
+                Err(verifier_error) => return Err(CircuitError::VerifierError(verifier_error)),
+            };
+        }
+        Ok(())
+    }
+
+
     fn run_modexp_circuit() -> Result<(), CircuitError> {
         // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
         // Test will pass if:
@@ -1572,8 +1638,77 @@ mod tests {
         Ok(())
     }
 
+
+    fn run_modexp_zero_modulus_circuit() -> Result<(), CircuitError> {
+        // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
+        // Test will pass if:
+        //  (1) result returned from circuit constrain_equal() to the
+        //      assigned result from bn calculation.
+        //  (2) prover.verify() for each run verifies without error.
+        const NUM_TESTS: usize = 5;
+        let mut bn_base_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let bit_len_b: [usize; NUM_TESTS] = [1, 4, 8, 10, 16];
+        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 16, 20];
+        let bit_len_e: [usize; NUM_TESTS] = [
+            //change for larger exp bit length.
+            1,
+            LIMB_WIDTH - 1,
+            LIMB_WIDTH + 1,
+            LIMB_WIDTH + LIMB_WIDTH - 1,
+            LIMB_WIDTH + LIMB_WIDTH + LIMB_WIDTH - 90, // max before overflow (need to check range)
+        ];
+        for i in 0..NUM_TESTS {
+            bn_base_test_vectors.push(get_random_x_bit_bn(bit_len_b[i]));
+            bn_modulus_test_vectors.push(get_random_x_bit_bn(bit_len_m[i]));
+            bn_exp_test_vectors.push(get_random_x_bit_bn(bit_len_e[i]));
+        }
+        for i in 0..NUM_TESTS {
+            let base_testcase = bn_base_test_vectors[i].clone();
+            let modulus_testcase = bn_modulus_test_vectors[i].clone();
+            let exp_testcase = bn_exp_test_vectors[i].clone();
+            //let bn_test_res = big_pow(base_testcase.clone(), exp_testcase.clone()) % modulus_testcase.clone();
+            let bn_test_res = BigUint::from(0u128);
+            println!(
+                "testcase: (0x{})^(0x{}) mod 0x{} = 0x{}",
+                base_testcase.clone().to_str_radix(16),
+                exp_testcase.clone().to_str_radix(16),
+                modulus_testcase.clone().to_str_radix(16),
+                bn_test_res.to_str_radix(16)
+            );
+            let base = base_testcase.clone();
+            let exp = exp_testcase.clone();
+            //let modulus = modulus_testcase.clone();
+            let modulus = BigUint::from(0u128);
+
+            let test_circuit = TestModExpCircuit {
+                base,
+                exp,
+                modulus,
+                bn_test_res,
+            };
+            let prover = match MockProver::run(16, &test_circuit, vec![]) {
+                Ok(prover_run) => prover_run,
+                Err(prover_error) => return Err(CircuitError::ProverError(prover_error)),
+            };
+            match prover.verify() {
+                Ok(_) => (),
+                Err(verifier_error) => return Err(CircuitError::VerifierError(verifier_error)),
+            };
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_mod_power108m1_only() {
+        let output =
+            run_mod_power108m1_circuit().expect("\nmod_power108m1_circuit failed prover verify");
+        println!("\nproof generation successful!\nresult: {:#?}", output);
+    }
+
+    #[test]
+    fn test_mod_power108m1_zero_only() {
         let output =
             run_mod_power108m1_circuit().expect("\nmod_power108m1_circuit failed prover verify");
         println!("\nproof generation successful!\nresult: {:#?}", output);
@@ -1607,8 +1742,20 @@ mod tests {
     }
 
     #[test]
+    fn test_mod_mult_zero() {
+        let output = run_mod_mult_circuit_zero().expect("\nmod_mult_circuit failed prover verify");
+        println!("\nproof generation successful!\nresult: {:#?}", output);
+    }
+
+    #[test]
     fn test_modexp() {
         let output = run_modexp_circuit().expect("\nmodexp_circuit failed prover verify");
+        println!("\nproof generation successful!\nresult: {:#?}", output);
+    }
+
+    #[test]
+    fn test_modexp_zero_modulus() {
+        let output = run_modexp_zero_modulus_circuit().expect("\nmodexp_circuit failed prover verify");
         println!("\nproof generation successful!\nresult: {:#?}", output);
     }
 
