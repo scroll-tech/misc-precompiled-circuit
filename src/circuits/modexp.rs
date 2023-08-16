@@ -1712,6 +1712,71 @@ mod tests {
         Ok(())
     }
 
+
+    fn run_modexp_small_p_circuit() -> Result<(), CircuitError> {
+        // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
+        // Test will pass if:
+        //  (1) result returned from circuit constrain_equal() to the
+        //      assigned result from bn calculation.
+        //  (2) prover.verify() for each run verifies without error.
+        const NUM_TESTS: usize = 1;
+        let mut bn_base_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let bit_len_b: [usize; NUM_TESTS] = [222];
+        let bit_len_m: [usize; NUM_TESTS] = [2];
+        let bit_len_e: [usize; NUM_TESTS] = [
+            //change for larger exp bit length. 324-90 = 234 (254bits)
+            LIMB_WIDTH + LIMB_WIDTH + LIMB_WIDTH - 90, // max before overflow (need to check range)
+        ];
+        for i in 0..NUM_TESTS {
+        let u256_from_str = BigUint::parse_bytes("efffffffffffffffffffffffffffffee".as_bytes(), 16).unwrap();
+            //bn_base_test_vectors.push(get_random_x_bit_bn(bit_len_b[i]));
+            bn_base_test_vectors.push(u256_from_str);
+            //bn_modulus_test_vectors.push(get_random_x_bit_bn(bit_len_m[i]));
+            bn_modulus_test_vectors.push(BigUint::from(2u64));
+            //bn_modulus_test_vectors.push(BigUint::from(2u64));
+            //bn_exp_test_vectors.push(get_random_x_bit_bn(bit_len_e[i]));
+            bn_exp_test_vectors.push(BigUint::from(3u64));
+        }
+        for i in 0..NUM_TESTS {
+            let base_testcase = bn_base_test_vectors[i].clone();
+            let modulus_testcase = bn_modulus_test_vectors[i].clone();
+            println!("modulus_testcase is {}", modulus_testcase);
+
+            let exp_testcase = bn_exp_test_vectors[i].clone();
+            //let bn_test_res = big_pow(base_testcase.clone(), exp_testcase.clone()) % modulus_testcase.clone();
+            let bn_test_res = base_testcase
+                .clone()
+                .modpow(&exp_testcase, &modulus_testcase);
+            println!(
+                "testcase: (0x{})^(0x{}) mod 0x{} = 0x{}",
+                base_testcase.clone().to_str_radix(16),
+                exp_testcase.clone().to_str_radix(16),
+                modulus_testcase.clone().to_str_radix(16),
+                bn_test_res.to_str_radix(16)
+            );
+            let base = base_testcase.clone();
+            let exp = exp_testcase.clone();
+            let modulus = modulus_testcase.clone();
+            let test_circuit = TestModExpCircuit {
+                base,
+                exp,
+                modulus,
+                bn_test_res,
+            };
+            let prover = match MockProver::run(16, &test_circuit, vec![]) {
+                Ok(prover_run) => prover_run,
+                Err(prover_error) => return Err(CircuitError::ProverError(prover_error)),
+            };
+            match prover.verify() {
+                Ok(_) => (),
+                Err(verifier_error) => return Err(CircuitError::VerifierError(verifier_error)),
+            };
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_mod_power108m1_only() {
         let output =
@@ -1770,6 +1835,12 @@ mod tests {
     fn test_modexp_zero_modulus() {
         let output =
             run_modexp_zero_modulus_circuit().expect("\nmodexp_circuit failed prover verify");
+        println!("\nproof generation successful!\nresult: {:#?}", output);
+    }
+
+    #[test]
+    fn test_modexp_small_p() {
+        let output = run_modexp_small_p_circuit().expect("\nmodexp_circuit failed prover verify");
         println!("\nproof generation successful!\nresult: {:#?}", output);
     }
 
