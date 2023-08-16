@@ -628,6 +628,10 @@ impl<F: FieldExt> ModExpChip<F> {
          * native:
          *    x*y = q*m + r
          */
+
+        // TODO: mod p first to avoid small p, k overflow
+        // lhs % p assign_line constraint
+        // rhs % p  assign_line constraint
         let bn_lhs = lhs.to_bn();
         let bn_rhs = rhs.to_bn();
         let bn_mult = bn_lhs.mul(bn_rhs);
