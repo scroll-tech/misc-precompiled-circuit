@@ -486,7 +486,8 @@ impl<F: FieldExt> ModExpChip<F> {
         limbs: Vec<Limb<F>>,
         signs: Vec<F>,
     ) -> Result<(), Error> {
-        const BUFMULT: u128 = 2u128; // as long as its > 2-bits wide.
+        // BUFMULT = 2 may cause overflow
+        const BUFMULT: u128 = 8u128; // as long as its > 2-bits wide.
         let f_c = F::from_u128(1u128 << 108) * F::from_u128(1u128 << 108);
         let f_cm = f_c * F::from_u128(BUFMULT);
         let v = (f_c * F::from_u128(BUFMULT))
