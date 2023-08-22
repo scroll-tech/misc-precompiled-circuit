@@ -44,7 +44,7 @@ impl<F: FieldExt> Number<F> {
         let limb2 = bn
             .div(BigUint::from(1u128 << 108))
             .div(BigUint::from(1u128 << 108));
-        let native = bn.div(field_to_bn(&(-F::one()))) + BigUint::from(1u128);
+        let native = bn % (field_to_bn(&(-F::one())) + BigUint::from(1u128));
         Number {
             limbs: [
                 Limb::new(None, bn_to_field(&limb0)),
@@ -194,33 +194,35 @@ impl<F: FieldExt> ModExpChip<F> {
         rem: &Number<F>,
         lhs: &Number<F>,
         rhs: &Number<F>,
+        modulus: &Number<F>,
+        quotient: &Number<F>,
     ) -> Result<Limb<F>, Error> {
-        let l = self.config.assign_line(
+        let rem = self.config.assign_line(
             region,
             range_check_chip,
             offset,
             [
-                None,
+                Some(modulus.limbs[3].clone()),
                 Some(lhs.limbs[3].clone()),
                 Some(rhs.limbs[3].clone()),
+                Some(quotient.limbs[3].clone()),
                 Some(rem.limbs[3].clone()),
-                None,
                 None,
             ],
             [
+                None,
                 None,
                 None,
                 None,
                 Some(-F::one()),
                 None,
-                None,
-                None,
-                None,
+                Some(-F::one()),
                 Some(F::one()),
+                None,
             ],
             0,
-        )?;
-        Ok(l[2].clone())
+        )?[4].clone();
+        Ok(rem)
     }
 
     pub fn mod_power108m1(
@@ -628,6 +630,10 @@ impl<F: FieldExt> ModExpChip<F> {
          * native:
          *    x*y = q*m + r
          */
+
+        // TODO: mod p first to avoid small p, k overflow
+        // lhs % p assign_line constraint
+        // rhs % p  assign_line constraint
         let bn_lhs = lhs.to_bn();
         let bn_rhs = rhs.to_bn();
         let bn_mult = bn_lhs.mul(bn_rhs);
@@ -675,33 +681,23 @@ impl<F: FieldExt> ModExpChip<F> {
             vec![mod_216_lhs, mod_216_rhs, mod_216_rem],
             vec![F::one(), -F::one(), -F::one()],
         )?;
-        let mod_native = self.mod_native_mul(region, range_check_chip, offset, &rem, &lhs, &rhs)?;
+        let mod_native = self.mod_native_mul(
+            region,
+            range_check_chip,
+            offset,
+            &rem,
+            &lhs,
+            &rhs,
+            &modulus,
+            &quotient
+        )?;
         Ok(Number {
             limbs: [r0, r1, r2, mod_native],
         })
     }
 
-    /// Selects result based on the condition exp_bit = '1' or '0' \
-    ///
-    /// # Arguments
-    ///
-    /// * `cond` - the exp_bit as a Limb in F, is only 0x1 or 0x0
-    /// * `base` - the value of the base as a Number<F>
-    /// * `one`  - the value of 1 as a Number<F>
-    ///
-    /// # Constraint
-    ///
-    ///     (w[1] * w[2] * c[7]) + (w[0] * w[3] * c[6]) + (w[4] * c[4]) + (w[3] * c[3]) = 0
-    ///     (cond * base * 1   ) + (cond * base * -1  ) + (res * 1    ) + (one * -1   ) = 0
-    ///
-    /// where: \
-    ///         res = base,   if exp_bit = '1' \
-    ///         res = one,    if exp_bit = '0' \
-    ///
-    /// # Example
-    /// ```
-    /// let select(region, offset, &cond, &base, &one);
-    /// ```
+    /// Selects result based on the condition cond = '1' or '0' \
+    /// result = cond * base + (1-cond) * one
     ///
     pub fn select(
         &self,
@@ -971,11 +967,12 @@ mod tests {
                     }
                     for i in 0..4 {
                         println!("result[{}] \t= {:?}", i, &result.limbs[i].value);
-                        println!("resultcell[{}] \t= {:?}", i, &result.limbs[i].cell);
-                        // region.constrain_equal(
-                        //     rem.limbs[i].clone().cell.unwrap().cell(),
-                        //     result.limbs[i].clone().cell.unwrap().cell()
-                        // )?;
+                        /* not equal since might overflow at most of 2 bits
+                        region.constrain_equal(
+                             rem[i].clone().cell.unwrap().cell(),
+                             result.limbs[i].clone().cell.unwrap().cell()
+                        )?;
+                        */
                     }
                     Ok(rem)
                 },
@@ -1021,7 +1018,7 @@ mod tests {
                 |mut region| {
                     range_chip.initialize(&mut region)?;
                     let mut offset = 0;
-                    let result =
+                    let _result =
                         helperchip.assign_results(&mut region, &mut offset, &self.bn_test_res)?;
                     let lhs = helperchip.assign_modulus(&mut region, &mut offset, &self.a)?;
                     let rhs = helperchip.assign_base(&mut region, &mut offset, &self.b)?;
@@ -1078,7 +1075,7 @@ mod tests {
                 |mut region| {
                     range_chip.initialize(&mut region)?;
                     let mut offset = 0;
-                    let result =
+                    let _result =
                         helperchip.assign_results(&mut region, &mut offset, &self.bn_test_res)?;
                     let lhs = helperchip.assign_base(&mut region, &mut offset, &self.l)?;
                     let rhs = helperchip.assign_base(&mut region, &mut offset, &self.r)?;
@@ -1270,7 +1267,7 @@ mod tests {
                         );
                         println!(
                             "remcell is {:?}, resultcell is {:?}",
-                            &rem.limbs[i].cell, &result.limbs[i].cell
+                            &rem.limbs[i].cell.as_ref().unwrap().value(), &result.limbs[i].cell.as_ref().unwrap().value()
                         );
                         region.constrain_equal(
                             rem.limbs[i].clone().cell.unwrap().cell(),
@@ -1708,6 +1705,61 @@ mod tests {
         Ok(())
     }
 
+
+    fn run_modexp_small_p_circuit() -> Result<(), CircuitError> {
+        // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
+        // Test will pass if:
+        //  (1) result returned from circuit constrain_equal() to the
+        //      assigned result from bn calculation.
+        //  (2) prover.verify() for each run verifies without error.
+        const NUM_TESTS: usize = 1;
+        let mut bn_base_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
+        for _ in 0..NUM_TESTS {
+            let u256_from_str = BigUint::parse_bytes("efffffffffffffffffffffffffffffee".as_bytes(), 16).unwrap();
+            bn_base_test_vectors.push(u256_from_str);
+            bn_modulus_test_vectors.push(BigUint::from(2u64));
+            bn_exp_test_vectors.push(BigUint::from(3u64));
+        }
+        for i in 0..NUM_TESTS {
+            let base_testcase = bn_base_test_vectors[i].clone();
+            let modulus_testcase = bn_modulus_test_vectors[i].clone();
+            println!("modulus_testcase is {}", modulus_testcase);
+
+            let exp_testcase = bn_exp_test_vectors[i].clone();
+            //let bn_test_res = big_pow(base_testcase.clone(), exp_testcase.clone()) % modulus_testcase.clone();
+            let bn_test_res = base_testcase
+                .clone()
+                .modpow(&exp_testcase, &modulus_testcase);
+            println!(
+                "testcase: (0x{})^(0x{}) mod 0x{} = 0x{}",
+                base_testcase.clone().to_str_radix(16),
+                exp_testcase.clone().to_str_radix(16),
+                modulus_testcase.clone().to_str_radix(16),
+                bn_test_res.to_str_radix(16)
+            );
+            let base = base_testcase.clone();
+            let exp = exp_testcase.clone();
+            let modulus = modulus_testcase.clone();
+            let test_circuit = TestModExpCircuit {
+                base,
+                exp,
+                modulus,
+                bn_test_res,
+            };
+            let prover = match MockProver::run(16, &test_circuit, vec![]) {
+                Ok(prover_run) => prover_run,
+                Err(prover_error) => return Err(CircuitError::ProverError(prover_error)),
+            };
+            match prover.verify() {
+                Ok(_) => (),
+                Err(verifier_error) => return Err(CircuitError::VerifierError(verifier_error)),
+            };
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_mod_power108m1_only() {
         let output =
@@ -1769,11 +1821,14 @@ mod tests {
         println!("\nproof generation successful!\nresult: {:#?}", output);
     }
 
+    #[test]
+    fn test_modexp_small_p() {
+        let output = run_modexp_small_p_circuit().expect("\nmodexp_circuit failed prover verify");
+        println!("\nproof generation successful!\nresult: {:#?}", output);
+    }
+
     // test helpers:
-    use halo2_proofs::{
-        dev::{FailureLocation, VerifyFailure},
-        plonk::Any,
-    };
+    use halo2_proofs::dev::VerifyFailure;
     use std::fmt;
 
     pub enum CircuitError {
@@ -1781,8 +1836,6 @@ mod tests {
         ProverError(Error),
         /// Thrown when verification fails.
         VerifierError(Vec<VerifyFailure>),
-        /// Thrown when no operation has been specified.
-        NoOperation,
     }
 
     impl fmt::Debug for CircuitError {
@@ -1793,9 +1846,6 @@ mod tests {
                 }
                 CircuitError::VerifierError(verifier_error) => {
                     write!(f, "verifier error in circuit: {:#?}", verifier_error)
-                }
-                CircuitError::NoOperation => {
-                    write!(f, "no operation is set (this should never happen.")
                 }
             }
         }

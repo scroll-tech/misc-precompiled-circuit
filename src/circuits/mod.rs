@@ -155,6 +155,7 @@ impl CommonGateConfig {
         limbs: &mut Vec<Limb<F>>,
         limbsize: usize
     ) -> Result <(), Error> {
+        assert!(limbsize % 4 == 0);
         let mut bool_limbs = field_to_bn(&limb.value).to_radix_le(2);
         bool_limbs.truncate(limbsize);
         bool_limbs.resize_with(limbsize, | | 0);
@@ -467,7 +468,7 @@ impl CommonGateConfig {
         Ok(l[1].clone())
     }
 
-    fn sum_with_constant<F:FieldExt, LC:LookupAssistChip<F>>(
+    pub fn sum_with_constant<F:FieldExt, LC:LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
