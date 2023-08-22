@@ -1600,7 +1600,7 @@ mod tests {
         let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let bit_len_b: [usize; NUM_TESTS] = [1, 4, 8, 250, 255];
-        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 255, 240];
+        let bit_len_m: [usize; NUM_TESTS] = [1, 4, 8, 255, 254];
         let bit_len_e: [usize; NUM_TESTS] = [
             //change for larger exp bit length.
             1,
