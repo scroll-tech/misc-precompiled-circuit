@@ -183,8 +183,6 @@ impl<F: FieldExt> ModExpChip<F> {
             0,
         )?[0].clone();
 
-        println!("true_limb");
-
         let false_limb = self.config.assign_line(
             region,
             range_check_chip,
@@ -209,19 +207,16 @@ impl<F: FieldExt> ModExpChip<F> {
             0,
         )?[0].clone();
 
-        println!("false_limb");
-
-        println!("res abs true {:?} {:?} {:?}", res.value, abs.value, true_limb.value);
-        println!("res abs false {:?} {:?} {:?}", res.value, abs.value, false_limb.value);
-        let res = self.config.assign_line (
+        //res (abs - true_limb) == 0
+        let [abs, _, _, res]: [Limb<_>; 4] = self.config.assign_line (
             region,
             range_check_chip,
             offset,
             [
-                Some(res.clone()),
-                Some(res.clone()),
                 Some(abs.clone()),
+                Some(res.clone()),
                 Some(true_limb.clone()),
+                Some(res.clone()),
                 None,
                 None,
             ],
@@ -235,20 +230,18 @@ impl<F: FieldExt> ModExpChip<F> {
                 Some(F::one()), Some(-F::one()),
                 None
             ],
-            0,
-        )?;
+            9,
+        )?.try_into().unwrap();
 
-        println!("true_zero");
-
-        // (res[0] - 1) (res[2] - false_limb)
+        // (res - 1) (abs - false_limb)
         self.config.assign_line (
             region,
             range_check_chip,
             offset,
             [
-                Some(res[0].clone()),
-                Some(res[0].clone()),
-                Some(res[2].clone()),
+                Some(res.clone()),
+                Some(res.clone()),
+                Some(abs.clone()),
                 Some(false_limb),
                 None,
                 None,
@@ -265,8 +258,7 @@ impl<F: FieldExt> ModExpChip<F> {
             ],
             0,
         )?;
-        println!("false_zero");
-        Ok(res[0].clone())
+        Ok(res.clone())
     }
 
     fn lt_number(
