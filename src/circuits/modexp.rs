@@ -763,10 +763,10 @@ impl<F: FieldExt> ModExpChip<F> {
         )?;
         let is_zero = self.number_is_zero(region, range_check_chip, offset, modulus)?;
         let modulus_mock: Number<F> =
-            self.select(region, range_check_chip, offset, &is_zero, &one, &modulus)?;
+            self.select(region, range_check_chip, offset, &is_zero, &modulus, &one)?;
         let r: Number<F> =
             self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
-        let res = self.select(region, range_check_chip, offset, &is_zero, &zero, &r)?;
+        let res = self.select(region, range_check_chip, offset, &is_zero, &r, &zero)?;
         self.lt_number(region, range_check_chip, offset, &res, modulus)?;
         Ok(res)
     }
@@ -864,42 +864,21 @@ impl<F: FieldExt> ModExpChip<F> {
         range_check_chip: &mut RangeCheckChip<F>,
         offset: &mut usize,
         cond: &Limb<F>,
-        base: &Number<F>,
         one: &Number<F>,
+        base: &Number<F>,
     ) -> Result<Number<F>, Error> {
-        let w4_val = if cond.value == F::one() {
-            base.clone()
-        } else {
-            one.clone()
-        };
         let mut limbs = vec![];
         for i in 0..4 {
-            let l = self.config.assign_line(
+            let l = self.config.select(
                 region,
                 range_check_chip,
                 offset,
-                [
-                    Some(cond.clone()),
-                    Some(cond.clone()),
-                    Some(base.limbs[i].clone()),
-                    Some(one.limbs[i].clone()),
-                    Some(w4_val.limbs[i].clone()),
-                    None,
-                ],
-                [
-                    None,
-                    None,
-                    None,
-                    Some(-F::one()),
-                    Some(F::one()),
-                    None,
-                    Some(F::one()),
-                    Some(-F::one()),
-                    None,
-                ],
-                0, // check this value is correct for select
+                cond,
+                &one.limbs[i],
+                &base.limbs[i],
+                0,
             )?;
-            limbs.push(l[4].clone());
+            limbs.push(l);
         }
         Ok(Number {
             limbs: limbs.try_into().unwrap(),
@@ -950,7 +929,7 @@ impl<F: FieldExt> ModExpChip<F> {
         let one = acc.clone();
         for limb in limbs.iter() {
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
-            let sval = self.select(region, range_check_chip, offset, &limb, &base, &one)?;
+            let sval = self.select(region, range_check_chip, offset, &limb, &one, &base)?;
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &sval, modulus)?;
         }
         Ok(acc)
