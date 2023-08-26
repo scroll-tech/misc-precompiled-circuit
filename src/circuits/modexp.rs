@@ -135,6 +135,7 @@ impl<F: FieldExt> ModExpChip<F> {
         Ok(number)
     }
 
+    /// check whether lhs is less or equal to rhs
     fn le_limb(
         &self,
         region: &mut Region<F>,
@@ -269,13 +270,23 @@ impl<F: FieldExt> ModExpChip<F> {
         lhs: &Number<F>,
         rhs: &Number<F>,
     ) -> Result<(), Error> {
+        // gt2 means lhs[2] >= rhs[2]
         let gt2 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[2], &lhs.limbs[2])?;
+        // gt1 means lhs[1] >= rhs[1]
         let gt1 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[1], &lhs.limbs[1])?;
+        // gt0 means lhs[0] >= rhs[0]
         let gt0 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[0], &lhs.limbs[0])?;
+
         let zero = self.config.assign_constant(region, range_check_chip, offset, &F::zero())?;
         let one= self.config.assign_constant(region, range_check_chip, offset, &F::one())?;
+
+        // if gt0 then zero else one means if lhs[0] < rhs[0] then one else zero
         let lt_0 = self.config.select(region, range_check_chip, offset, &gt0, &one, &zero, 0)?;
+
+        // if gt1 then zero else one means if lhs[1] < rhs[1] then one else lt_0
         let lt_1 = self.config.select(region, range_check_chip, offset, &gt1, &one, &lt_0, 0)?;
+
+        // if gt2 then zero else one means if lhs[2] < rhs[2] then one else lt_1
         let lt = self.config.select(region, range_check_chip, offset, &gt2, &one, &lt_1, 0)?;
         self.config.eq_constant(region, range_check_chip, offset, &lt, &F::one())?;
         Ok(())
