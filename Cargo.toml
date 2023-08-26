@@ -14,7 +14,7 @@ path = "src/lib.rs"
 strum = "0.24.1"
 strum_macros = "0.24.1"
 halo2_proofs = { git = "https://github.com/scroll-tech/halo2.git", branch = "develop" }
-halo2-gate-generator = { git = "https://github.com/DelphinusLab/halo2gategen.git", branch = "main" }
+halo2-gate-generator = { git = "https://github.com/scroll-tech/halo2gategen.git"}
 num-bigint = { version = "0.4", features = ["rand"] }
 rand = "0.8"
 serde = { version = "1.0.152", features = ["serde_derive"] }

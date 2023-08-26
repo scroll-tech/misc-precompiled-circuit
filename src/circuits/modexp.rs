@@ -22,11 +22,11 @@ pub struct ModExpChip<F: FieldExt> {
 
 #[derive(Clone, Debug)]
 pub struct Number<F: FieldExt> {
-    limbs: [Limb<F>; 4],
+    pub limbs: [Limb<F>; 4],
 }
 
 impl<F: FieldExt> Number<F> {
-    fn add(&self, n: &Self) -> Self {
+    pub fn add(&self, n: &Self) -> Self {
         Number {
             limbs: [
                 Limb::new(None, self.limbs[0].value + n.limbs[0].value),
@@ -36,7 +36,7 @@ impl<F: FieldExt> Number<F> {
             ],
         }
     }
-    fn from_bn(bn: &BigUint) -> Self {
+    pub fn from_bn(bn: &BigUint) -> Self {
         let limb0 = bn.modpow(&BigUint::from(1u128), &BigUint::from(1u128 << 108));
         let limb1 = (bn - limb0.clone())
             .div(BigUint::from(1u128 << 108))
@@ -54,7 +54,7 @@ impl<F: FieldExt> Number<F> {
             ],
         }
     }
-    fn to_bn(&self) -> BigUint {
+    pub fn to_bn(&self) -> BigUint {
         let limb0 = field_to_bn(&self.limbs[0].value);
         let limb1 = field_to_bn(&self.limbs[1].value);
         let limb2 = field_to_bn(&self.limbs[2].value);
@@ -1342,6 +1342,7 @@ mod tests {
                             result.limbs[i].clone().cell.unwrap().cell(),
                         )?;
                     }
+                    // println!("offset final {}", offset);
                     Ok(())
                 },
             )?;

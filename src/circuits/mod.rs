@@ -8,7 +8,6 @@ use crate::utils::{
 };
 
 use halo2_gate_generator::{
-    Limb,
     GateCell,
     customized_circuits,
     table_item,
@@ -27,6 +26,7 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
+pub use halo2_gate_generator::Limb;
 
 /*
  * Customized gates for some of the common host circuits.
