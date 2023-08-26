@@ -687,10 +687,10 @@ impl<F: FieldExt> ModExpChip<F> {
                 .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
         let limb1_zero =
             self.config
-                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+                .eq_constant(region, range_check_chip, offset, &number.limbs[1], &zero)?;
         let limb2_zero =
             self.config
-                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+                .eq_constant(region, range_check_chip, offset, &number.limbs[2], &zero)?;
 
         // all the above zero flat is either zero or one thus bounded
         // thus check all of them are 1 equals to check the sum of them are 3
