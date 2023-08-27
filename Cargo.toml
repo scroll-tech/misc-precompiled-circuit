@@ -1,5 +1,5 @@
 [package]
-name = "rmd160-circuits"
+name = "misc-precompiled-circuit"
 authors = ["xgao@zoyoe.com"]
 version = "0.1.0"
 edition = "2021"
