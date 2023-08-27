@@ -135,6 +135,163 @@ impl<F: FieldExt> ModExpChip<F> {
         Ok(number)
     }
 
+    /// check whether lhs is less or equal to rhs
+    fn le_limb(
+        &self,
+        region: &mut Region<F>,
+        range_check_chip: &mut RangeCheckChip<F>,
+        offset: &mut usize,
+        lhs: &Limb<F>,
+        rhs: &Limb<F>,
+    ) -> Result<Limb<F>, Error> {
+        let bn_rhs = field_to_bn(&rhs.value);
+        let bn_lhs = field_to_bn(&lhs.value);
+        let (diff_true, diff_false) = (
+            Limb::new(None, bn_to_field::<F>(&bn_rhs) - bn_to_field::<F>(&bn_lhs)),
+            Limb::new(None, bn_to_field::<F>(&bn_lhs) - bn_to_field::<F>(&bn_rhs) - F::one())
+        );
+        let (abs, res) = if bn_rhs >= bn_lhs {
+            (
+                Limb::new(None, bn_to_field::<F>(&(bn_rhs - bn_lhs))),
+                Limb::new(None, F::one())
+            )
+        } else {
+            (
+                Limb::new(None, bn_to_field::<F>(&(bn_lhs - bn_rhs - BigUint::from(1u64)))),
+                Limb::new(None, F::zero())
+            )
+        };
+        let true_limb = self.config.assign_line(
+            region,
+            range_check_chip,
+            offset,
+            [
+                Some(diff_true.clone()),
+                Some(rhs.clone()),
+                Some(lhs.clone()),
+                None,
+                None,
+                None,
+            ],
+            [
+                Some(-F::one()),
+                Some(F::one()),
+                Some(-F::one()),
+                None,
+                None, None,
+                None, None, None
+            ],
+            0,
+        )?[0].clone();
+
+        let false_limb = self.config.assign_line(
+            region,
+            range_check_chip,
+            offset,
+            [
+                Some(diff_false.clone()),
+                Some(rhs.clone()),
+                Some(lhs.clone()),
+                None,
+                None,
+                None,
+            ],
+            [
+                Some(-F::one()),
+                Some(-F::one()),
+                Some(F::one()),
+                None,
+                None,
+                None, None, None,
+                Some(-F::one()),
+            ],
+            0,
+        )?[0].clone();
+
+        //res (abs - true_limb) == 0
+        let [abs, _, _, res]: [Limb<_>; 4] = self.config.assign_line (
+            region,
+            range_check_chip,
+            offset,
+            [
+                Some(abs.clone()),
+                Some(res.clone()),
+                Some(true_limb.clone()),
+                Some(res.clone()),
+                None,
+                None,
+            ],
+            [
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(F::one()), Some(-F::one()),
+                None
+            ],
+            9,
+        )?.try_into().unwrap();
+
+        // (res - 1) (abs - false_limb)
+        self.config.assign_line (
+            region,
+            range_check_chip,
+            offset,
+            [
+                Some(res.clone()),
+                Some(res.clone()),
+                Some(abs.clone()),
+                Some(false_limb),
+                None,
+                None,
+            ],
+            [
+                None,
+                None,
+                Some(-F::one()),
+                Some(F::one()),
+                None,
+                None,
+                Some(-F::one()), Some(F::one()),
+                None
+            ],
+            0,
+        )?;
+        Ok(res.clone())
+    }
+
+    fn lt_number(
+        &self,
+        region: &mut Region<F>,
+        range_check_chip: &mut RangeCheckChip<F>,
+        offset: &mut usize,
+        lhs: &Number<F>,
+        rhs: &Number<F>,
+    ) -> Result<(), Error> {
+        // gt2 means lhs[2] >= rhs[2]
+        let gt2 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[2], &lhs.limbs[2])?;
+        // gt1 means lhs[1] >= rhs[1]
+        let gt1 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[1], &lhs.limbs[1])?;
+        // gt0 means lhs[0] >= rhs[0]
+        let gt0 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[0], &lhs.limbs[0])?;
+
+        let zero = self.config.assign_constant(region, range_check_chip, offset, &F::zero())?;
+        let one= self.config.assign_constant(region, range_check_chip, offset, &F::one())?;
+
+        // if gt0 then zero else one means if lhs[0] < rhs[0] then one else zero
+        let lt_0 = self.config.select(region, range_check_chip, offset, &gt0, &one, &zero, 0)?;
+
+        // if gt1 then zero else one means if lhs[1] < rhs[1] then one else lt_0
+        let lt_1 = self.config.select(region, range_check_chip, offset, &gt1, &one, &lt_0, 0)?;
+
+        // if gt2 then zero else one means if lhs[2] < rhs[2] then one else lt_1
+        let lt = self.config.select(region, range_check_chip, offset, &gt2, &one, &lt_1, 0)?;
+        self.config.eq_constant(region, range_check_chip, offset, &lt, &F::one())?;
+        Ok(())
+    }
+
     pub fn mod_add(
         &self,
         region: &mut Region<F>,
@@ -541,10 +698,10 @@ impl<F: FieldExt> ModExpChip<F> {
                 .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
         let limb1_zero =
             self.config
-                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+                .eq_constant(region, range_check_chip, offset, &number.limbs[1], &zero)?;
         let limb2_zero =
             self.config
-                .eq_constant(region, range_check_chip, offset, &number.limbs[0], &zero)?;
+                .eq_constant(region, range_check_chip, offset, &number.limbs[2], &zero)?;
 
         // all the above zero flat is either zero or one thus bounded
         // thus check all of them are 1 equals to check the sum of them are 3
@@ -606,10 +763,12 @@ impl<F: FieldExt> ModExpChip<F> {
         )?;
         let is_zero = self.number_is_zero(region, range_check_chip, offset, modulus)?;
         let modulus_mock: Number<F> =
-            self.select(region, range_check_chip, offset, &is_zero, &one, &modulus)?;
+            self.select(region, range_check_chip, offset, &is_zero, &modulus, &one)?;
         let r: Number<F> =
             self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
-        self.select(region, range_check_chip, offset, &is_zero, &zero, &r)
+        let res = self.select(region, range_check_chip, offset, &is_zero, &r, &zero)?;
+        self.lt_number(region, range_check_chip, offset, &res, modulus)?;
+        Ok(res)
     }
 
     pub fn mod_mult_unsafe(
@@ -705,42 +864,21 @@ impl<F: FieldExt> ModExpChip<F> {
         range_check_chip: &mut RangeCheckChip<F>,
         offset: &mut usize,
         cond: &Limb<F>,
-        base: &Number<F>,
         one: &Number<F>,
+        base: &Number<F>,
     ) -> Result<Number<F>, Error> {
-        let w4_val = if cond.value == F::one() {
-            base.clone()
-        } else {
-            one.clone()
-        };
         let mut limbs = vec![];
         for i in 0..4 {
-            let l = self.config.assign_line(
+            let l = self.config.select(
                 region,
                 range_check_chip,
                 offset,
-                [
-                    Some(cond.clone()),
-                    Some(cond.clone()),
-                    Some(base.limbs[i].clone()),
-                    Some(one.limbs[i].clone()),
-                    Some(w4_val.limbs[i].clone()),
-                    None,
-                ],
-                [
-                    None,
-                    None,
-                    None,
-                    Some(-F::one()),
-                    Some(F::one()),
-                    None,
-                    Some(F::one()),
-                    Some(-F::one()),
-                    None,
-                ],
-                0, // check this value is correct for select
+                cond,
+                &one.limbs[i],
+                &base.limbs[i],
+                0,
             )?;
-            limbs.push(l[4].clone());
+            limbs.push(l);
         }
         Ok(Number {
             limbs: limbs.try_into().unwrap(),
@@ -791,7 +929,7 @@ impl<F: FieldExt> ModExpChip<F> {
         let one = acc.clone();
         for limb in limbs.iter() {
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
-            let sval = self.select(region, range_check_chip, offset, &limb, &base, &one)?;
+            let sval = self.select(region, range_check_chip, offset, &limb, &one, &base)?;
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &sval, modulus)?;
         }
         Ok(acc)
