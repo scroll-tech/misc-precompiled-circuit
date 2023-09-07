@@ -4,6 +4,7 @@ use num_bigint::BigUint;
 
 pub fn field_to_bn<F: FieldExt>(f: &F) -> BigUint {
     let bytes = f.to_repr();
+    // to_repr is little-endian as per the test below.
     BigUint::from_bytes_le(bytes.as_ref())
 }
 
@@ -27,7 +28,7 @@ pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
     let mut r = vec![];
     for _ in 0..4 {
         r.append(&mut vec![F::from((rem % 256) as u64)]);
-        rem = rem/256;
+        rem = rem / 256;
     }
     r.try_into().unwrap()
 }
@@ -36,17 +37,15 @@ pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
 pub fn cell_to_value<F: FieldExt>(cell: &AssignedCell<F, F>) -> F {
     //cell.value().map_or(0, |x| field_to_u32(x))
     let mut r = F::zero();
-    cell.value().map(|x| { r = *x });
+    cell.value().map(|x| r = *x);
     r
 }
-
-
 
 /* FIXME should not get value based on cell in new halo2 */
 pub fn cell_to_u32<F: FieldExt>(cell: &AssignedCell<F, F>) -> u32 {
     //cell.value().map_or(0, |x| field_to_u32(x))
     let mut r = 0;
-    cell.value().map(|x| { r = field_to_u32(x) });
+    cell.value().map(|x| r = field_to_u32(x));
     r
 }
 
@@ -139,4 +138,25 @@ macro_rules! value_for_assign {
     };
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{bn_to_field, field_to_bn};
+    use halo2_proofs::halo2curves::{bn256::Fr, group::ff::PrimeField};
 
+    #[test]
+    fn test_bn_field_roundtrip() {
+        let repr = Fr::one().to_repr();
+        assert_eq!(
+            repr,
+            [
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0
+            ],
+            "F::to_repr() must be little-endian"
+        );
+
+        let a = -Fr::one();
+        let b = bn_to_field(&field_to_bn(&a));
+        assert_eq!(a, b);
+    }
+}
