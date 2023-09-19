@@ -927,9 +927,16 @@ impl<F: FieldExt> ModExpChip<F> {
             0,
         )?;
         let one = acc.clone();
-        for limb in limbs.iter() {
+        let base2 = acc = self.mod_mult(region, range_check_chip, offset, &base, &base, modulus)?;
+        let base3 = acc = self.mod_mult(region, range_check_chip, offset, &base, &base2, modulus)?;
+        for limb_group in limbs.chunks_exact(2) {
+            let high = limb_group[0].clone();
+            let low = limb_group[1].clone();
+            let s1 = self.select(region, range_check_chip, offset, &high, base, &base3)?;
+            let s2 = self.select(region, range_check_chip, offset, &high, &one, &base2)?;
+            let sval = self.select(region, range_check_chip, offset, &low, &s2, &s1)?;
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
-            let sval = self.select(region, range_check_chip, offset, &limb, &one, &base)?;
+            acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &sval, modulus)?;
         }
         Ok(acc)
