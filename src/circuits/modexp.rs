@@ -927,18 +927,33 @@ impl<F: FieldExt> ModExpChip<F> {
             0,
         )?;
         let one = acc.clone();
-        let base2 = acc = self.mod_mult(region, range_check_chip, offset, &base, &base, modulus)?;
-        let base3 = acc = self.mod_mult(region, range_check_chip, offset, &base, &base2, modulus)?;
-        for limb_group in limbs.chunks_exact(2) {
-            let high = limb_group[0].clone();
-            let low = limb_group[1].clone();
-            let s1 = self.select(region, range_check_chip, offset, &high, base, &base3)?;
-            let s2 = self.select(region, range_check_chip, offset, &high, &one, &base2)?;
-            let sval = self.select(region, range_check_chip, offset, &low, &s2, &s1)?;
-            acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
-            acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
+        let window = 4;
+        let mut selectors = vec![one, base.clone()];
+        for _ in 2..(1<<window) {
+            selectors.push(self.mod_mult(region, range_check_chip, offset, selectors.last().as_ref().unwrap(), &base, modulus)?);
+        }
+        selectors.reverse();
+        assert_eq!(selectors.len(), 1<<window);
+        for limb_group in limbs.chunks_exact(window) {
+            let mut choice = selectors.clone();
+            for i in 0..window {
+                let bit = limb_group[i].clone();
+                let (sh, sl) = choice.split_at(choice.len()/2);
+                assert_eq!(sh.len(), sl.len());
+                let mut next = vec![];
+                for (h,l) in sh.into_iter().zip(sl) {
+                    next.push(self.select(region, range_check_chip, offset, &bit, l, h)?);
+                }
+                choice = next;
+            }
+            assert_eq!(choice.len(), 1);
+            let sval = choice[0].clone();
+            for _ in 0..window {
+                acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
+            }
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &sval, modulus)?;
         }
+        //println!("offset {} {}", offset, range_check_chip.offset());
         Ok(acc)
     }
 }

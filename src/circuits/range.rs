@@ -82,6 +82,10 @@ impl<F: FieldExt> RangeCheckChip<F> {
         }
     }
 
+    pub fn offset(&mut self) -> usize {
+        self.offset
+    }
+
     pub fn configure(cs: &mut ConstraintSystem<F>) -> RangeCheckConfig {
         let witness= [0; 3]
                 .map(|_|cs.advice_column());
