@@ -415,6 +415,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "misc-precompiled-circuit"
+version = "0.1.0"
+dependencies = [
+ "halo2-gate-generator",
+ "halo2_proofs",
+ "lazy_static",
+ "num-bigint",
+ "rand",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "subtle",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -614,22 +630,6 @@ name = "regex-syntax"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ab07dc67230e4a4718e70fd5c20055a4334b121f1f9db8fe63ef39ce9b8c846"
-
-[[package]]
-name = "rmd160-circuits"
-version = "0.1.0"
-dependencies = [
- "halo2-gate-generator",
- "halo2_proofs",
- "lazy_static",
- "num-bigint",
- "rand",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "subtle",
-]
 
 [[package]]
 name = "rustversion"
