@@ -222,9 +222,8 @@ impl CommonGateConfig {
                 ],
                 0,
             )?;
-        /* todo
-         * constraint all the limbs to be either 1 or 0
-         */
+
+        // the following constrains all the limbs to be either 1 or 0 (bool type)
 
         // apply eqn: (val * val) - val = 0,
         // by: (ws[1] * ws[2] * cs[7]) + (ws[0] * cs[0]) = 0,
