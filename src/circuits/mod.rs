@@ -1,28 +1,18 @@
-pub mod rmd160;
 pub mod modexp;
 pub mod range;
+pub mod rmd160;
 
-
-use crate::utils::{
-    field_to_bn,
-};
+use crate::utils::field_to_bn;
 
 use halo2_gate_generator::{
+    customized_circuits, customized_circuits_expand, item_count, table_item, value_for_assign,
     GateCell,
-    customized_circuits,
-    table_item,
-    item_count,
-    customized_circuits_expand,
-    value_for_assign,
 };
 
 use halo2_proofs::{
-    arithmetic::FieldExt,
     circuit::Region,
-    plonk::{
-        Fixed, Advice, Column, ConstraintSystem,
-        Error, Expression, Selector, VirtualCells
-    },
+    halo2curves::ff::PrimeField,
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Fixed, Selector, VirtualCells},
     poly::Rotation,
 };
 
@@ -33,14 +23,43 @@ pub use halo2_gate_generator::Limb;
  * lookup_hint: lookup information that is usually combined with l0
  * lookup_ind: whether perform lookup at this line
  */
-customized_circuits!(CommonGateConfig, 2, 5, 12, 0,
-   | l0  | l1   | l2  | l3  | d   |  c0  | c1  | c2  | c3  | cd  | cdn | c   | c03  | c12  | lookup_hint | lookup_ind  | sel
-   | nil | nil  | nil | nil | d_n |  nil | nil | nil | nil | nil | nil | nil | nil  | nil  | nil         | nil         | nil
-);
+customized_circuits!(CommonGateConfig, 2, 5, 12, 0, |l0| l1
+    | l2
+    | l3
+    | d
+    | c0
+    | c1
+    | c2
+    | c3
+    | cd
+    | cdn
+    | c
+    | c03
+    | c12
+    | lookup_hint
+    | lookup_ind
+    | sel
+    | nil
+    | nil
+    | nil
+    | nil
+    | d_n
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil
+    | nil);
 
 pub trait LookupAssistConfig {
     /// register a column (col) to be range checked by limb size (sz)
-    fn register<F: FieldExt> (
+    fn register<F: PrimeField>(
         &self,
         cs: &mut ConstraintSystem<F>,
         col: impl FnOnce(&mut VirtualCells<F>) -> Expression<F>,
@@ -48,8 +67,8 @@ pub trait LookupAssistConfig {
     );
 }
 
-pub trait LookupAssistChip<F:FieldExt> {
-    fn provide_lookup_evidence (
+pub trait LookupAssistChip<F: PrimeField> {
+    fn provide_lookup_evidence(
         &mut self,
         region: &mut Region<F>,
         value: F,
@@ -58,24 +77,31 @@ pub trait LookupAssistChip<F:FieldExt> {
 }
 
 impl CommonGateConfig {
-    pub fn configure<F:FieldExt, LC:LookupAssistConfig> (cs: &mut ConstraintSystem<F>, lookup_assist_config: &LC) -> Self {
-        let witness= [0; 5]
-                .map(|_|cs.advice_column());
+    pub fn configure<F: PrimeField, LC: LookupAssistConfig>(
+        cs: &mut ConstraintSystem<F>,
+        lookup_assist_config: &LC,
+    ) -> Self {
+        let witness = [0; 5].map(|_| cs.advice_column());
         witness.map(|x| cs.enable_equality(x));
         let fixed = [0; 12].map(|_| cs.fixed_column());
-        let selector =[];
+        let selector = [];
 
-        let config = CommonGateConfig { fixed, selector, witness };
+        let config = CommonGateConfig {
+            fixed,
+            selector,
+            witness,
+        };
 
         lookup_assist_config.register(
             cs,
-            |c| config.get_expr(c, CommonGateConfig::l0()) * config.get_expr(c, CommonGateConfig::lookup_ind()),
+            |c| {
+                config.get_expr(c, CommonGateConfig::l0())
+                    * config.get_expr(c, CommonGateConfig::lookup_ind())
+            },
             |c| config.get_expr(c, CommonGateConfig::lookup_hint()),
         );
 
         cs.create_gate("one line constraint", |meta| {
-
-
             let l0 = config.get_expr(meta, CommonGateConfig::l0());
             let l1 = config.get_expr(meta, CommonGateConfig::l1());
             let l2 = config.get_expr(meta, CommonGateConfig::l2());
@@ -86,34 +112,32 @@ impl CommonGateConfig {
             let c1 = config.get_expr(meta, CommonGateConfig::c1());
             let c2 = config.get_expr(meta, CommonGateConfig::c2());
             let c3 = config.get_expr(meta, CommonGateConfig::c3());
-            let c  = config.get_expr(meta, CommonGateConfig::c());
-            let cd  = config.get_expr(meta, CommonGateConfig::cd());
-            let cdn  = config.get_expr(meta, CommonGateConfig::cdn());
+            let c = config.get_expr(meta, CommonGateConfig::c());
+            let cd = config.get_expr(meta, CommonGateConfig::cd());
+            let cdn = config.get_expr(meta, CommonGateConfig::cdn());
             let c03 = config.get_expr(meta, CommonGateConfig::c03());
-            let c12  = config.get_expr(meta, CommonGateConfig::c12());
+            let c12 = config.get_expr(meta, CommonGateConfig::c12());
             let sel = config.get_expr(meta, CommonGateConfig::sel());
 
             // if odd then carry is put at right else put at left
             vec![
-                sel * (
-                    l0.clone() * c0
-                +   l1.clone() * c1
-                +   l2.clone() * c2
-                +   l3.clone() * c3
-                +   d  * cd
-                +   dnext * cdn
-                +   l0 * l3 * c03
-                +   l1 * l2 * c12
-                +   c)
+                sel * (l0.clone() * c0
+                    + l1.clone() * c1
+                    + l2.clone() * c2
+                    + l3.clone() * c3
+                    + d * cd
+                    + dnext * cdn
+                    + l0 * l3 * c03
+                    + l1 * l2 * c12
+                    + c),
             ]
-
         });
 
         config
     }
 
     /// Select between f and t: if cond then t else f
-    pub fn select<F:FieldExt, LC: LookupAssistChip<F>>(
+    pub fn select<F: PrimeField, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
@@ -123,12 +147,15 @@ impl CommonGateConfig {
         t: &Limb<F>,
         hint: u64,
     ) -> Result<Limb<F>, Error> {
-        let result = if cond.value == F::zero() {
+        let result = if cond.value == F::ZERO {
             Limb::new(None, f.value.clone())
         } else {
             Limb::new(None, t.value.clone())
         };
-        let l = self.assign_line(region, lookup_assist_chip, offset,
+        let l = self.assign_line(
+            region,
+            lookup_assist_chip,
+            offset,
             [
                 Some(t.clone()),
                 Some(f.clone()),
@@ -137,7 +164,17 @@ impl CommonGateConfig {
                 Some(result.clone()),
                 None,
             ],
-            [None, Some(F::one()), None, None, Some(-F::one()), None, Some(F::one()), Some(-F::one()), None],
+            [
+                None,
+                Some(F::ONE),
+                None,
+                None,
+                Some(-F::ONE),
+                None,
+                Some(F::ONE),
+                Some(-F::ONE),
+                None,
+            ],
             hint,
         )?;
         Ok(l[4].clone())
@@ -146,26 +183,26 @@ impl CommonGateConfig {
     ///
     /// decompose a limb into binary cells, in big endian
     /// limbsize needs to be a multiple of 4
-    pub fn decompose_limb<F:FieldExt, LC:LookupAssistChip<F>>(
+    pub fn decompose_limb<F: PrimeField, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
         offset: &mut usize,
         limb: &Limb<F>,
         limbs: &mut Vec<Limb<F>>,
-        limbsize: usize
-    ) -> Result <(), Error> {
+        limbsize: usize,
+    ) -> Result<(), Error> {
         assert!(limbsize % 4 == 0);
         let mut bool_limbs = field_to_bn(&limb.value).to_radix_le(2);
         bool_limbs.truncate(limbsize);
-        bool_limbs.resize_with(limbsize, | | 0);
+        bool_limbs.resize_with(limbsize, || 0);
         bool_limbs.reverse();
-        let mut v = F::zero();
-        for i in 0..(limbsize/4) {
-            let l0 = F::from_u128(bool_limbs[4*i] as u128);
-            let l1 = F::from_u128(bool_limbs[4*i+1] as u128);
-            let l2 = F::from_u128(bool_limbs[4*i+2] as u128);
-            let l3 = F::from_u128(bool_limbs[4*i+3] as u128);
+        let mut v = F::ZERO;
+        for i in 0..(limbsize / 4) {
+            let l0 = F::from_u128(bool_limbs[4 * i] as u128);
+            let l1 = F::from_u128(bool_limbs[4 * i + 1] as u128);
+            let l2 = F::from_u128(bool_limbs[4 * i + 2] as u128);
+            let l3 = F::from_u128(bool_limbs[4 * i + 3] as u128);
             let v_next = v * F::from_u128(16u128)
                 + l0 * F::from_u128(8u128)
                 + l1 * F::from_u128(4u128)
@@ -189,8 +226,10 @@ impl CommonGateConfig {
                     Some(F::from_u128(2u128)),
                     Some(F::from_u128(1u128)),
                     Some(F::from_u128(16u128)),
-                    Some(-F::one()),
-                    None, None, None
+                    Some(-F::ONE),
+                    None,
+                    None,
+                    None,
                 ],
                 0,
             )?;
@@ -200,28 +239,30 @@ impl CommonGateConfig {
         // constraint that limb.value is equal v_next so that the above limbs is
         // a real decompose of the limb.value
         self.assign_line(
-                region,
-                lookup_assist_chip,
-                offset,
-                [
-                    Some(limb.clone()),
-                    None,
-                    None,
-                    None,
-                    Some(Limb::new(None, v)),
-                    None,
-                ],
-                [
-                    Some(F::one()),
-                    None,
-                    None,
-                    None,
-                    Some(-F::one()),
-                    None,
-                    None, None, None
-                ],
-                0,
-            )?;
+            region,
+            lookup_assist_chip,
+            offset,
+            [
+                Some(limb.clone()),
+                None,
+                None,
+                None,
+                Some(Limb::new(None, v)),
+                None,
+            ],
+            [
+                Some(F::ONE),
+                None,
+                None,
+                None,
+                Some(-F::ONE),
+                None,
+                None,
+                None,
+                None,
+            ],
+            0,
+        )?;
 
         // the following constrains all the limbs to be either 1 or 0 (bool type)
 
@@ -242,12 +283,17 @@ impl CommonGateConfig {
                     None,
                 ],
                 [
-                    Some(-F::one()), None, None, None, None, None,
+                    Some(-F::ONE),
                     None,
-                    Some(F::one()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(F::ONE),
                     None,
                 ],
-                0  //what is limbbound
+                0, //what is limbbound
             )?;
         }
 
@@ -255,13 +301,13 @@ impl CommonGateConfig {
     }
 
     /// put pure witness advices with no constraints.
-    pub fn assign_witness<F:FieldExt, LC:LookupAssistChip<F>> (
-       &self,
-       region: &mut Region<F>,
-       _lookup_assist_chip: &mut LC,
-       offset: &mut usize,
-       value:  [Option<Limb<F>>; 5],
-       hint: u64, // the boundary limit of the first cell
+    pub fn assign_witness<F: PrimeField, LC: LookupAssistChip<F>>(
+        &self,
+        region: &mut Region<F>,
+        _lookup_assist_chip: &mut LC,
+        offset: &mut usize,
+        value: [Option<Limb<F>>; 5],
+        hint: u64, // the boundary limit of the first cell
     ) -> Result<Vec<Limb<F>>, Error> {
         let witnesses = [
             CommonGateConfig::l0(),
@@ -272,49 +318,66 @@ impl CommonGateConfig {
         ];
         let mut limbs = vec![];
         for i in 0..5 {
-            let v = value[i].as_ref().map_or(F::zero(), |x| x.value);
+            let v = value[i].as_ref().map_or(F::ZERO, |x| x.value);
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
             value[i].clone().map(|x| {
                 limbs.push(limb.clone());
                 x.cell.as_ref().map(|c| {
-                    region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap();
+                    region
+                        .constrain_equal(limb.get_the_cell().cell(), c.cell())
+                        .unwrap();
                 });
             });
         }
-        self.assign_cell(region, *offset, &CommonGateConfig::lookup_hint(), F::from(hint))?;
-        self.assign_cell(region, *offset, &CommonGateConfig::lookup_ind(), F::from(
-            if hint == 0 {0u64} else {1u64}
-        ))?;
+        self.assign_cell(
+            region,
+            *offset,
+            &CommonGateConfig::lookup_hint(),
+            F::from(hint),
+        )?;
+        self.assign_cell(
+            region,
+            *offset,
+            &CommonGateConfig::lookup_ind(),
+            F::from(if hint == 0 { 0u64 } else { 1u64 }),
+        )?;
 
-        *offset = *offset+1;
+        *offset = *offset + 1;
         Ok(limbs)
     }
 
-
-
-    fn assign_line<F:FieldExt, LC:LookupAssistChip<F>> (
-       &self,
-       region: &mut Region<F>,
-       lookup_assist_chip: &mut LC,
-       offset: &mut usize,
-       value:  [Option<Limb<F>>; 6],
-       coeffs: [Option<F>; 9],
-       hint: u64, // the boundary limit of the first cell
+    fn assign_line<F: PrimeField, LC: LookupAssistChip<F>>(
+        &self,
+        region: &mut Region<F>,
+        lookup_assist_chip: &mut LC,
+        offset: &mut usize,
+        value: [Option<Limb<F>>; 6],
+        coeffs: [Option<F>; 9],
+        hint: u64, // the boundary limit of the first cell
     ) -> Result<Vec<Limb<F>>, Error> {
-        let ws = value.clone().to_vec().iter()
-            .map(|x|x.clone().map_or(F::zero(), |x| x.value))
+        let ws = value
+            .clone()
+            .to_vec()
+            .iter()
+            .map(|x| x.clone().map_or(F::ZERO, |x| x.value))
             .collect::<Vec<F>>();
-        let cs = coeffs.clone().to_vec().iter().map(|x| x.map_or(F::zero(), |x| x)).collect::<Vec<F>>();
+        let cs = coeffs
+            .clone()
+            .to_vec()
+            .iter()
+            .map(|x| x.map_or(F::ZERO, |x| x))
+            .collect::<Vec<F>>();
         assert!(
             ws[0] * cs[0]
-            + ws[1] * cs[1]
-            + ws[2] * cs[2]
-            + ws[3] * cs[3]
-            + ws[4] * cs[4]
-            + ws[5] * cs[5]
-            + ws[0] * ws[3] * cs[6]
-            + ws[1] * ws[2] * cs[7]
-            + cs[8] == F::zero()
+                + ws[1] * cs[1]
+                + ws[2] * cs[2]
+                + ws[3] * cs[3]
+                + ws[4] * cs[4]
+                + ws[5] * cs[5]
+                + ws[0] * ws[3] * cs[6]
+                + ws[1] * ws[2] * cs[7]
+                + cs[8]
+                == F::ZERO
         );
 
         let witnesses = [
@@ -337,60 +400,86 @@ impl CommonGateConfig {
             CommonGateConfig::c(),
         ];
 
-
         let mut limbs = vec![];
         for i in 0..6 {
-            let v = value[i].as_ref().map_or(F::zero(), |x| x.value);
+            let v = value[i].as_ref().map_or(F::ZERO, |x| x.value);
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
             value[i].clone().map(|x| {
                 limbs.push(limb.clone());
                 x.cell.map(|c| {
-                    region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap();
+                    region
+                        .constrain_equal(limb.get_the_cell().cell(), c.cell())
+                        .unwrap();
                 });
             });
         }
         for i in 0..9 {
-            let v = coeffs[i].as_ref().map_or(F::zero(), |x| *x);
+            let v = coeffs[i].as_ref().map_or(F::ZERO, |x| *x);
             self.assign_cell(region, *offset, &cs[i], v).unwrap();
         }
-        self.assign_cell(region, *offset, &CommonGateConfig::sel(), F::one())?;
-        self.assign_cell(region, *offset, &CommonGateConfig::lookup_hint(), F::from(hint))?;
-        self.assign_cell(region, *offset, &CommonGateConfig::lookup_ind(), F::from(
-            if hint == 0 {0u64} else {1u64}
-        ))?;
+        self.assign_cell(region, *offset, &CommonGateConfig::sel(), F::ONE)?;
+        self.assign_cell(
+            region,
+            *offset,
+            &CommonGateConfig::lookup_hint(),
+            F::from(hint),
+        )?;
+        self.assign_cell(
+            region,
+            *offset,
+            &CommonGateConfig::lookup_ind(),
+            F::from(if hint == 0 { 0u64 } else { 1u64 }),
+        )?;
 
         if hint != 0 {
-            lookup_assist_chip.provide_lookup_evidence(region, value[0].as_ref().unwrap().value, hint)?;
+            lookup_assist_chip.provide_lookup_evidence(
+                region,
+                value[0].as_ref().unwrap().value,
+                hint,
+            )?;
         };
 
-        *offset = *offset+1;
+        *offset = *offset + 1;
         Ok(limbs)
     }
 
-    pub fn assign_constant<F:FieldExt, LC:LookupAssistChip<F>> (
+    pub fn assign_constant<F: PrimeField, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
         offset: &mut usize,
         value: &F,
     ) -> Result<Limb<F>, Error> {
-        let l = self.assign_line(region, lookup_assist_chip, offset,
-                [
-                    Some(Limb::new(None, value.clone())),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
-                [Some(F::one()), None, None, None, None, None, None, None, Some(-value.clone())],
-                0
+        let l = self.assign_line(
+            region,
+            lookup_assist_chip,
+            offset,
+            [
+                Some(Limb::new(None, value.clone())),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            [
+                Some(F::ONE),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(-value.clone()),
+            ],
+            0,
         )?;
         Ok(l[0].clone())
     }
 
     /// check if limb is equal to constant F
-    pub fn eq_constant<F: FieldExt, LC: LookupAssistChip<F>>(
+    pub fn eq_constant<F: PrimeField, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
@@ -402,15 +491,15 @@ impl CommonGateConfig {
         // ((limb.value - constant) * r)
         // ((inv * (limb.value - constant)) - (1-r))
         let (inv, r) = if delta.is_zero_vartime() {
-            (F::one(), F::one())
+            (F::ONE, F::ONE)
         } else {
-            (delta.invert().unwrap(), F::zero())
+            (delta.invert().unwrap(), F::ZERO)
         };
         let diff = self.sum_with_constant(
             region,
             lookup_assist_chip,
             offset,
-            vec![(limb, F::one())],
+            vec![(limb, F::ONE)],
             Some(-constant.clone()),
         )?;
         let r = self.assign_line(
@@ -425,17 +514,7 @@ impl CommonGateConfig {
                 None,
                 None,
             ],
-            [
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(F::one()),
-                None,
-                None,
-            ],
+            [None, None, None, None, None, None, Some(F::ONE), None, None],
             0,
         )?;
         let r = r[1].clone();
@@ -453,81 +532,129 @@ impl CommonGateConfig {
             ],
             [
                 None,
-                Some(F::one()),
+                Some(F::ONE),
                 None,
                 None,
                 None,
                 None,
-                Some(F::one()),
+                Some(F::ONE),
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
             ],
             0,
         )?;
         Ok(l[1].clone())
     }
 
-    pub fn sum_with_constant<F:FieldExt, LC:LookupAssistChip<F>>(
+    pub fn sum_with_constant<F: PrimeField, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
         lookup_assist_chip: &mut LC,
         offset: &mut usize,
         inputs: Vec<(&Limb<F>, F)>,
         constant: Option<F>,
-    ) -> Result <Limb<F>, Error> {
-        let mut acc = F::zero();
+    ) -> Result<Limb<F>, Error> {
+        let mut acc = F::ZERO;
         let mut firstline = true;
         let operands = inputs.clone();
         let mut r = None;
         for chunk in operands.chunks(4) {
-            let result = chunk.iter().fold(acc, |acc, &(l,v)| acc + l.value * v);
-            if inputs.len() <= 3 { // solve it in oneline
-                let result = result + constant.map_or(F::zero(), |x| x);
-                let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v.clone())).collect::<Vec<Option<F>>>();
+            let result = chunk.iter().fold(acc, |acc, &(l, v)| acc + l.value * v);
+            if inputs.len() <= 3 {
+                // solve it in oneline
+                let result = result + constant.map_or(F::ZERO, |x| x);
+                let mut limbs = chunk
+                    .iter()
+                    .map(|&(l, _v)| Some(l.clone()))
+                    .collect::<Vec<Option<Limb<_>>>>();
+                let mut coeffs = chunk
+                    .iter()
+                    .map(|&(_l, v)| Some(v.clone()))
+                    .collect::<Vec<Option<F>>>();
                 limbs.resize_with(3, || None);
                 coeffs.resize_with(3, || None);
-                limbs.append(&mut vec![Some(Limb::new(None, result)), Some(Limb::new(None, acc)), None]);
-                coeffs.append(&mut vec![Some(-F::one()), if firstline {None} else {Some(F::one())}, None, None, None, constant]);
+                limbs.append(&mut vec![
+                    Some(Limb::new(None, result)),
+                    Some(Limb::new(None, acc)),
+                    None,
+                ]);
+                coeffs.append(&mut vec![
+                    Some(-F::ONE),
+                    if firstline { None } else { Some(F::ONE) },
+                    None,
+                    None,
+                    None,
+                    constant,
+                ]);
                 let l = self.assign_line(
                     region,
                     lookup_assist_chip,
                     offset,
                     limbs.try_into().unwrap(),
                     coeffs.try_into().unwrap(),
-                    0
+                    0,
                 )?;
                 r = Some(l.get(l.len() - 2).unwrap().clone());
             } else {
-                let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v.clone())).collect::<Vec<Option<F>>>();
-                limbs.resize_with(4, | | None);
-                coeffs.resize_with(4, | | None);
-                limbs.append(&mut vec![Some(Limb::new(None, acc)), Some(Limb::new(None, result))]);
-                coeffs.append(&mut vec![Some(F::one()), Some(-F::one()), None, None, None]);
+                let mut limbs = chunk
+                    .iter()
+                    .map(|&(l, _v)| Some(l.clone()))
+                    .collect::<Vec<Option<Limb<_>>>>();
+                let mut coeffs = chunk
+                    .iter()
+                    .map(|&(_l, v)| Some(v.clone()))
+                    .collect::<Vec<Option<F>>>();
+                limbs.resize_with(4, || None);
+                coeffs.resize_with(4, || None);
+                limbs.append(&mut vec![
+                    Some(Limb::new(None, acc)),
+                    Some(Limb::new(None, result)),
+                ]);
+                coeffs.append(&mut vec![Some(F::ONE), Some(-F::ONE), None, None, None]);
                 self.assign_line(
                     region,
                     lookup_assist_chip,
                     offset,
                     limbs.try_into().unwrap(),
                     coeffs.try_into().unwrap(),
-                    0
+                    0,
                 )?;
             }
             acc = result;
             firstline = false;
         }
         Ok(r.unwrap_or_else(|| {
-            let result = acc + constant.map_or(F::zero(), |x| x);
+            let result = acc + constant.map_or(F::ZERO, |x| x);
             // collect the last acc as result
             self.assign_line(
-                    region,
-                    lookup_assist_chip,
-                    offset,
-                    [Some(Limb::new(None, result)), None, None, None, Some(Limb::new(None, acc)), None],
-                    [Some(-F::one()), None, None, None, Some(F::one()), None, None, None, constant],
-                    0
-            ).unwrap().into_iter().next().unwrap()
+                region,
+                lookup_assist_chip,
+                offset,
+                [
+                    Some(Limb::new(None, result)),
+                    None,
+                    None,
+                    None,
+                    Some(Limb::new(None, acc)),
+                    None,
+                ],
+                [
+                    Some(-F::ONE),
+                    None,
+                    None,
+                    None,
+                    Some(F::ONE),
+                    None,
+                    None,
+                    None,
+                    constant,
+                ],
+                0,
+            )
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap()
         }))
     }
 }

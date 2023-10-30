@@ -1,29 +1,50 @@
-use halo2_proofs::arithmetic::FieldExt;
-use halo2_proofs::circuit::AssignedCell;
+use halo2_proofs::{
+    circuit::AssignedCell,
+    halo2curves::ff::{FromUniformBytes, PrimeField},
+};
 use num_bigint::BigUint;
 
-pub fn field_to_bn<F: FieldExt>(f: &F) -> BigUint {
+pub fn field_to_bn<F: PrimeField>(f: &F) -> BigUint {
     let bytes = f.to_repr();
     // to_repr is little-endian as per the test below.
     BigUint::from_bytes_le(bytes.as_ref())
 }
 
-pub fn bn_to_field<F: FieldExt>(bn: &BigUint) -> F {
+pub fn bn_to_field<F: FromUniformBytes<64>>(bn: &BigUint) -> F {
     let mut bytes = bn.to_bytes_le();
     bytes.resize(64, 0);
-    F::from_bytes_wide(&bytes.try_into().unwrap())
+    F::from_uniform_bytes(&bytes.try_into().unwrap())
 }
 
-pub fn field_to_u32<F: FieldExt>(f: &F) -> u32 {
-    f.get_lower_32()
+pub fn field_to_u32<F: PrimeField>(f: &F) -> u32 {
+    // hmmm any better ways to handle this?
+    let tmp: [u8; 4] = f
+        .to_repr()
+        .as_ref()
+        .iter()
+        .take(4)
+        .copied()
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    u32::from_le_bytes(tmp)
 }
 
-pub fn field_to_u64<F: FieldExt>(f: &F) -> u64 {
-    let bytes = f.get_lower_128().to_le_bytes();
-    u64::from_le_bytes(bytes[0..8].try_into().unwrap())
+pub fn field_to_u64<F: PrimeField>(f: &F) -> u64 {
+    // hmmm any better ways to handle this?
+    let tmp: [u8; 8] = f
+        .to_repr()
+        .as_ref()
+        .iter()
+        .take(8)
+        .copied()
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    u64::from_le_bytes(tmp)
 }
 
-pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
+pub fn u32_to_limbs<F: PrimeField>(v: u32) -> [F; 4] {
     let mut rem = v;
     let mut r = vec![];
     for _ in 0..4 {
@@ -34,22 +55,22 @@ pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
 }
 
 /* FIXME should not get value based on cell in new halo2 */
-pub fn cell_to_value<F: FieldExt>(cell: &AssignedCell<F, F>) -> F {
+pub fn cell_to_value<F: PrimeField>(cell: &AssignedCell<F, F>) -> F {
     //cell.value().map_or(0, |x| field_to_u32(x))
-    let mut r = F::zero();
+    let mut r = F::ZERO;
     cell.value().map(|x| r = *x);
     r
 }
 
 /* FIXME should not get value based on cell in new halo2 */
-pub fn cell_to_u32<F: FieldExt>(cell: &AssignedCell<F, F>) -> u32 {
+pub fn cell_to_u32<F: PrimeField>(cell: &AssignedCell<F, F>) -> u32 {
     //cell.value().map_or(0, |x| field_to_u32(x))
     let mut r = 0;
     cell.value().map(|x| r = field_to_u32(x));
     r
 }
 
-pub fn cell_to_limbs<F: FieldExt>(cell: &AssignedCell<F, F>) -> [F; 4] {
+pub fn cell_to_limbs<F: PrimeField>(cell: &AssignedCell<F, F>) -> [F; 4] {
     let a = cell_to_u32(cell);
     u32_to_limbs(a)
 }
