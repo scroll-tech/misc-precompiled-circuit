@@ -230,7 +230,7 @@ dependencies = [
 [[package]]
 name = "halo2-gate-generator"
 version = "0.1.0"
-source = "git+https://github.com/zhenfeizhang/halo2gategen/?branch=sync-ff-0.13#0ada1c8079dece0df1d4730f0afb9380066b6932"
+source = "git+https://github.com/scroll-tech/halo2gategen#8ccf462e1eff4ed0e602d7ba19771b2c53dee0e3"
 dependencies = [
  "halo2_proofs",
  "lazy_static",
@@ -246,7 +246,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.2.0"
-source = "git+https://github.com/scroll-tech/halo2.git?branch=sync-ff-0.13#1cde5469747920be3e872d7a0e875e772ba2346b"
+source = "git+https://github.com/scroll-tech/halo2.git?branch=v1.0#44dbed4515984bbc14cb8283e273794b03c28afa"
 dependencies = [
  "ark-std",
  "blake2b_simd",
@@ -256,12 +256,11 @@ dependencies = [
  "group",
  "halo2curves",
  "log",
- "maybe-rayon",
  "num-bigint",
  "num-integer",
  "poseidon",
- "rand_chacha",
  "rand_core",
+ "rayon",
  "sha3",
  "subtle",
  "tracing",
@@ -283,6 +282,8 @@ dependencies = [
  "paste",
  "rand",
  "rand_core",
+ "serde",
+ "serde_arrays",
  "static_assertions",
  "subtle",
 ]
@@ -328,16 +329,6 @@ name = "log"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
-
-[[package]]
-name = "maybe-rayon"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea1f30cedd69f0a2954655f7188c6a834246d2bcf1e315e2ac40c4b24dc9519"
-dependencies = [
- "cfg-if 1.0.0",
- "rayon",
-]
 
 [[package]]
 name = "memoffset"
@@ -436,7 +427,7 @@ checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
 [[package]]
 name = "poseidon"
 version = "0.2.0"
-source = "git+https://github.com/scroll-tech/poseidon.git?branch=sync-halo2-lib-0.4.0#5787dd3d2ce7a9e9601a035c396ac0c03449b54d"
+source = "git+https://github.com/scroll-tech/poseidon.git?branch=main#5787dd3d2ce7a9e9601a035c396ac0c03449b54d"
 dependencies = [
  "halo2curves",
  "subtle",
@@ -547,6 +538,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25dd9975e68d0cb5aa1120c288333fc98731bd1dd12f561e468ea4728c042b89"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde_arrays"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38636132857f68ec3d5f3eb121166d2af33cb55174c4d5ff645db6165cbef0fd"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

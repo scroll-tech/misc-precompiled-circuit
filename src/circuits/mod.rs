@@ -321,7 +321,11 @@ impl CommonGateConfig {
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
             if let Some(x) = value[i].clone() {
                 limbs.push(limb.clone());
-                if let Some(c) = x.cell.as_ref() { region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap(); }
+                if let Some(c) = x.cell.as_ref() {
+                    region
+                        .constrain_equal(limb.get_the_cell().cell(), c.cell())
+                        .unwrap();
+                }
             }
         }
         self.assign_cell(
@@ -401,7 +405,11 @@ impl CommonGateConfig {
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
             if let Some(x) = value[i].clone() {
                 limbs.push(limb.clone());
-                if let Some(c) = x.cell { region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap(); }
+                if let Some(c) = x.cell {
+                    region
+                        .constrain_equal(limb.get_the_cell().cell(), c.cell())
+                        .unwrap();
+                }
             }
         }
         for i in 0..9 {
@@ -441,17 +449,23 @@ impl CommonGateConfig {
         offset: &mut usize,
         value: &F,
     ) -> Result<Limb<F>, Error> {
-        let l = self.assign_line(region, lookup_assist_chip, offset,
-                [
-                    Some(Limb::new(None, *value)),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
-                [Some(F::ONE), None, None, None, None, None, None, None, Some(-*value)],
-                0
+        let l = self.assign_line(
+            region,
+            lookup_assist_chip,
+            offset,
+            [Some(Limb::new(None, *value)), None, None, None, None, None],
+            [
+                Some(F::ONE),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(-*value),
+            ],
+            0,
         )?;
         Ok(l[0].clone())
     }
@@ -537,11 +551,18 @@ impl CommonGateConfig {
         let operands = inputs.clone();
         let mut r = None;
         for chunk in operands.chunks(4) {
-            let result = chunk.iter().fold(acc, |acc, &(l,v)| acc + l.value * v);
-            if inputs.len() <= 3 { // solve it in oneline
+            let result = chunk.iter().fold(acc, |acc, &(l, v)| acc + l.value * v);
+            if inputs.len() <= 3 {
+                // solve it in oneline
                 let result = result + constant.map_or(F::ZERO, |x| x);
-                let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v)).collect::<Vec<Option<F>>>();
+                let mut limbs = chunk
+                    .iter()
+                    .map(|&(l, _v)| Some(l.clone()))
+                    .collect::<Vec<Option<Limb<_>>>>();
+                let mut coeffs = chunk
+                    .iter()
+                    .map(|&(_l, v)| Some(v))
+                    .collect::<Vec<Option<F>>>();
                 limbs.resize_with(3, || None);
                 coeffs.resize_with(3, || None);
                 limbs.append(&mut vec![
@@ -567,11 +588,20 @@ impl CommonGateConfig {
                 )?;
                 r = Some(l.get(l.len() - 2).unwrap().clone());
             } else {
-                let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v)).collect::<Vec<Option<F>>>();
-                limbs.resize_with(4, | | None);
-                coeffs.resize_with(4, | | None);
-                limbs.append(&mut vec![Some(Limb::new(None, acc)), Some(Limb::new(None, result))]);
+                let mut limbs = chunk
+                    .iter()
+                    .map(|&(l, _v)| Some(l.clone()))
+                    .collect::<Vec<Option<Limb<_>>>>();
+                let mut coeffs = chunk
+                    .iter()
+                    .map(|&(_l, v)| Some(v))
+                    .collect::<Vec<Option<F>>>();
+                limbs.resize_with(4, || None);
+                coeffs.resize_with(4, || None);
+                limbs.append(&mut vec![
+                    Some(Limb::new(None, acc)),
+                    Some(Limb::new(None, result)),
+                ]);
                 coeffs.append(&mut vec![Some(F::ONE), Some(-F::ONE), None, None, None]);
                 self.assign_line(
                     region,
