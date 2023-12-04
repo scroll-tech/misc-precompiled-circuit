@@ -1,5 +1,6 @@
 use crate::utils::{bn_to_field, field_to_bn};
 use halo2_gate_generator::Limb;
+use halo2_proofs::halo2curves::ff::{FromUniformBytes, PrimeField};
 
 use crate::circuits::CommonGateConfig;
 
@@ -8,24 +9,23 @@ use crate::circuits::range::{RangeCheckChip, RangeCheckConfig};
 use std::ops::{Div, Mul};
 
 use halo2_proofs::{
-    arithmetic::FieldExt,
     circuit::{Chip, Region},
     plonk::{ConstraintSystem, Error},
 };
 use num_bigint::BigUint;
 use std::marker::PhantomData;
 
-pub struct ModExpChip<F: FieldExt> {
+pub struct ModExpChip<F: PrimeField> {
     config: CommonGateConfig,
     _marker: PhantomData<F>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Number<F: FieldExt> {
+pub struct Number<F: PrimeField> {
     pub limbs: [Limb<F>; 4],
 }
 
-impl<F: FieldExt> Number<F> {
+impl<F: PrimeField + FromUniformBytes<64>> Number<F> {
     pub fn add(&self, n: &Self) -> Self {
         Number {
             limbs: [
@@ -44,7 +44,7 @@ impl<F: FieldExt> Number<F> {
         let limb2 = bn
             .div(BigUint::from(1u128 << 108))
             .div(BigUint::from(1u128 << 108));
-        let native = bn % (field_to_bn(&(-F::one())) + BigUint::from(1u128));
+        let native = bn % (field_to_bn(&(-F::ONE)) + BigUint::from(1u128));
         Number {
             limbs: [
                 Limb::new(None, bn_to_field(&limb0)),
@@ -62,7 +62,7 @@ impl<F: FieldExt> Number<F> {
     }
 }
 
-impl<F: FieldExt> Chip<F> for ModExpChip<F> {
+impl<F: PrimeField> Chip<F> for ModExpChip<F> {
     type Config = CommonGateConfig;
     type Loaded = ();
 
@@ -75,7 +75,7 @@ impl<F: FieldExt> Chip<F> for ModExpChip<F> {
     }
 }
 
-impl<F: FieldExt> ModExpChip<F> {
+impl<F: PrimeField + FromUniformBytes<64>> ModExpChip<F> {
     pub fn new(config: CommonGateConfig) -> Self {
         ModExpChip {
             config,
@@ -148,17 +148,23 @@ impl<F: FieldExt> ModExpChip<F> {
         let bn_lhs = field_to_bn(&lhs.value);
         let (diff_true, diff_false) = (
             Limb::new(None, bn_to_field::<F>(&bn_rhs) - bn_to_field::<F>(&bn_lhs)),
-            Limb::new(None, bn_to_field::<F>(&bn_lhs) - bn_to_field::<F>(&bn_rhs) - F::one())
+            Limb::new(
+                None,
+                bn_to_field::<F>(&bn_lhs) - bn_to_field::<F>(&bn_rhs) - F::ONE,
+            ),
         );
         let (abs, res) = if bn_rhs >= bn_lhs {
             (
                 Limb::new(None, bn_to_field::<F>(&(bn_rhs - bn_lhs))),
-                Limb::new(None, F::one())
+                Limb::new(None, F::ONE),
             )
         } else {
             (
-                Limb::new(None, bn_to_field::<F>(&(bn_lhs - bn_rhs - BigUint::from(1u64)))),
-                Limb::new(None, F::zero())
+                Limb::new(
+                    None,
+                    bn_to_field::<F>(&(bn_lhs - bn_rhs - BigUint::from(1u64))),
+                ),
+                Limb::new(None, F::ZERO),
             )
         };
         let true_limb = self.config.assign_line(
@@ -174,15 +180,19 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
             ],
             [
-                Some(-F::one()),
-                Some(F::one()),
-                Some(-F::one()),
+                Some(-F::ONE),
+                Some(F::ONE),
+                Some(-F::ONE),
                 None,
-                None, None,
-                None, None, None
+                None,
+                None,
+                None,
+                None,
+                None,
             ],
             0,
-        )?[0].clone();
+        )?[0]
+            .clone();
 
         let false_limb = self.config.assign_line(
             region,
@@ -197,45 +207,53 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
             ],
             [
-                Some(-F::one()),
-                Some(-F::one()),
-                Some(F::one()),
+                Some(-F::ONE),
+                Some(-F::ONE),
+                Some(F::ONE),
                 None,
                 None,
-                None, None, None,
-                Some(-F::one()),
+                None,
+                None,
+                None,
+                Some(-F::ONE),
             ],
             0,
-        )?[0].clone();
+        )?[0]
+            .clone();
 
         //res (abs - true_limb) == 0
-        let [abs, _, _, res]: [Limb<_>; 4] = self.config.assign_line (
-            region,
-            range_check_chip,
-            offset,
-            [
-                Some(abs.clone()),
-                Some(res.clone()),
-                Some(true_limb.clone()),
-                Some(res.clone()),
-                None,
-                None,
-            ],
-            [
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(F::one()), Some(-F::one()),
-                None
-            ],
-            9,
-        )?.try_into().unwrap();
+        let [abs, _, _, res]: [Limb<_>; 4] = self
+            .config
+            .assign_line(
+                region,
+                range_check_chip,
+                offset,
+                [
+                    Some(abs.clone()),
+                    Some(res.clone()),
+                    Some(true_limb.clone()),
+                    Some(res.clone()),
+                    None,
+                    None,
+                ],
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(F::ONE),
+                    Some(-F::ONE),
+                    None,
+                ],
+                9,
+            )?
+            .try_into()
+            .unwrap();
 
         // (res - 1) (abs - false_limb)
-        self.config.assign_line (
+        self.config.assign_line(
             region,
             range_check_chip,
             offset,
@@ -250,12 +268,13 @@ impl<F: FieldExt> ModExpChip<F> {
             [
                 None,
                 None,
-                Some(-F::one()),
-                Some(F::one()),
+                Some(-F::ONE),
+                Some(F::ONE),
                 None,
                 None,
-                Some(-F::one()), Some(F::one()),
-                None
+                Some(-F::ONE),
+                Some(F::ONE),
+                None,
             ],
             0,
         )?;
@@ -271,24 +290,53 @@ impl<F: FieldExt> ModExpChip<F> {
         rhs: &Number<F>,
     ) -> Result<(), Error> {
         // gt2 means lhs[2] >= rhs[2]
-        let gt2 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[2], &lhs.limbs[2])?;
+        let gt2 = self.le_limb(
+            region,
+            range_check_chip,
+            offset,
+            &rhs.limbs[2],
+            &lhs.limbs[2],
+        )?;
         // gt1 means lhs[1] >= rhs[1]
-        let gt1 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[1], &lhs.limbs[1])?;
+        let gt1 = self.le_limb(
+            region,
+            range_check_chip,
+            offset,
+            &rhs.limbs[1],
+            &lhs.limbs[1],
+        )?;
         // gt0 means lhs[0] >= rhs[0]
-        let gt0 = self.le_limb(region, range_check_chip, offset, &rhs.limbs[0], &lhs.limbs[0])?;
+        let gt0 = self.le_limb(
+            region,
+            range_check_chip,
+            offset,
+            &rhs.limbs[0],
+            &lhs.limbs[0],
+        )?;
 
-        let zero = self.config.assign_constant(region, range_check_chip, offset, &F::zero())?;
-        let one= self.config.assign_constant(region, range_check_chip, offset, &F::one())?;
+        let zero = self
+            .config
+            .assign_constant(region, range_check_chip, offset, &F::ZERO)?;
+        let one = self
+            .config
+            .assign_constant(region, range_check_chip, offset, &F::ONE)?;
 
         // if gt0 then zero else one means if lhs[0] < rhs[0] then one else zero
-        let lt_0 = self.config.select(region, range_check_chip, offset, &gt0, &one, &zero, 0)?;
+        let lt_0 = self
+            .config
+            .select(region, range_check_chip, offset, &gt0, &one, &zero, 0)?;
 
         // if gt1 then zero else one means if lhs[1] < rhs[1] then one else lt_0
-        let lt_1 = self.config.select(region, range_check_chip, offset, &gt1, &one, &lt_0, 0)?;
+        let lt_1 = self
+            .config
+            .select(region, range_check_chip, offset, &gt1, &one, &lt_0, 0)?;
 
         // if gt2 then zero else one means if lhs[2] < rhs[2] then one else lt_1
-        let lt = self.config.select(region, range_check_chip, offset, &gt2, &one, &lt_1, 0)?;
-        self.config.eq_constant(region, range_check_chip, offset, &lt, &F::one())?;
+        let lt = self
+            .config
+            .select(region, range_check_chip, offset, &gt2, &one, &lt_1, 0)?;
+        self.config
+            .eq_constant(region, range_check_chip, offset, &lt, &F::ONE)?;
         Ok(())
     }
 
@@ -321,11 +369,11 @@ impl<F: FieldExt> ModExpChip<F> {
                             None,
                         ],
                         [
-                            Some(F::one()),
-                            Some(F::one()),
+                            Some(F::ONE),
+                            Some(F::ONE),
                             None,
                             None,
-                            Some(F::one()),
+                            Some(F::ONE),
                             None,
                             None,
                             None,
@@ -371,14 +419,15 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
                 None,
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
-                Some(-F::one()),
-                Some(F::one()),
+                Some(-F::ONE),
+                Some(F::ONE),
                 None,
             ],
             0,
-        )?[4].clone();
+        )?[4]
+            .clone();
         Ok(rem)
     }
 
@@ -403,11 +452,11 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
             ],
             [
-                Some(F::one()),
-                Some(F::one()),
-                Some(F::one()),
+                Some(F::ONE),
+                Some(F::ONE),
+                Some(F::ONE),
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
                 None,
                 None,
@@ -439,11 +488,11 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
             ],
             [
-                Some(F::one()),
+                Some(F::ONE),
                 Some(F::from_u128(1u128 << 108)),
                 None,
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
                 None,
                 None,
@@ -479,11 +528,11 @@ impl<F: FieldExt> ModExpChip<F> {
                 Some(F::from_u128((1u128 << 108) - 1)),
                 None,
                 None,
-                Some(F::one()),
+                Some(F::ONE),
                 None,
                 None,
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
             ],
             10,
@@ -526,10 +575,10 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
                 None,
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
-                Some(F::one()),
-                Some(F::one()),
+                Some(F::ONE),
+                Some(F::ONE),
                 None,
             ],
             0,
@@ -549,9 +598,9 @@ impl<F: FieldExt> ModExpChip<F> {
             [Some(q), Some(vcell), None, Some(r), None, None],
             [
                 Some(F::from_u128(1u128 << 108)),
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
-                Some(F::one()),
+                Some(F::ONE),
                 None,
                 None,
                 None,
@@ -580,10 +629,10 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
                 None,
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
                 None,
-                Some(F::one()),
+                Some(F::ONE),
                 None,
             ],
             0, // TODO: need to check rcell range
@@ -690,7 +739,7 @@ impl<F: FieldExt> ModExpChip<F> {
         offset: &mut usize,
         number: &Number<F>,
     ) -> Result<Limb<F>, Error> {
-        let zero = F::zero();
+        let zero = F::ZERO;
         let three = F::from(3u64);
         // limb0_zero is 0 if not zero, 1 if zero
         let limb0_zero =
@@ -721,11 +770,11 @@ impl<F: FieldExt> ModExpChip<F> {
                 None,
             ],
             [
-                Some(F::one()),
-                Some(F::one()),
-                Some(F::one()),
+                Some(F::ONE),
+                Some(F::ONE),
+                Some(F::ONE),
                 None,
-                Some(-F::one()),
+                Some(-F::ONE),
                 None,
                 None,
                 None,
@@ -826,7 +875,7 @@ impl<F: FieldExt> ModExpChip<F> {
                 mod_108m1_rhs.clone(),
                 mod_108m1_rem.clone(),
             ],
-            vec![F::one(), -F::one(), -F::one()],
+            vec![F::ONE, -F::ONE, -F::ONE],
         )?;
         let mod_216_lhs = self.mod_power216_mul(region, range_check_chip, offset, lhs, rhs)?;
         let mod_216_rhs =
@@ -838,7 +887,7 @@ impl<F: FieldExt> ModExpChip<F> {
             range_check_chip,
             offset,
             vec![mod_216_lhs, mod_216_rhs, mod_216_rem],
-            vec![F::one(), -F::one(), -F::one()],
+            vec![F::ONE, -F::ONE, -F::ONE],
         )?;
         let mod_native = self.mod_native_mul(
             region,
@@ -848,7 +897,7 @@ impl<F: FieldExt> ModExpChip<F> {
             lhs,
             rhs,
             &modulus,
-            &quotient
+            &quotient,
         )?;
         Ok(Number {
             limbs: [r0, r1, r2, mod_native],
@@ -1405,7 +1454,8 @@ mod tests {
                         );
                         println!(
                             "remcell is {:?}, resultcell is {:?}",
-                            &rem.limbs[i].cell.as_ref().unwrap().value(), &result.limbs[i].cell.as_ref().unwrap().value()
+                            &rem.limbs[i].cell.as_ref().unwrap().value(),
+                            &result.limbs[i].cell.as_ref().unwrap().value()
                         );
                         region.constrain_equal(
                             rem.limbs[i].clone().cell.unwrap().cell(),
@@ -1844,7 +1894,6 @@ mod tests {
         Ok(())
     }
 
-
     fn run_modexp_small_p_circuit() -> Result<(), CircuitError> {
         // Create an a set of test vectors varying in bit lengths for base, exp & modulus.
         // Test will pass if:
@@ -1856,7 +1905,8 @@ mod tests {
         let mut bn_modulus_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         let mut bn_exp_test_vectors: Vec<BigUint> = Vec::with_capacity(NUM_TESTS);
         for _ in 0..NUM_TESTS {
-            let u256_from_str = BigUint::parse_bytes("efffffffffffffffffffffffffffffee".as_bytes(), 16).unwrap();
+            let u256_from_str =
+                BigUint::parse_bytes("efffffffffffffffffffffffffffffee".as_bytes(), 16).unwrap();
             bn_base_test_vectors.push(u256_from_str);
             bn_modulus_test_vectors.push(BigUint::from(2u64));
             bn_exp_test_vectors.push(BigUint::from(3u64));
