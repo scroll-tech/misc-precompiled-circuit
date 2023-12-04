@@ -38,7 +38,7 @@ pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
     let mut r = vec![];
     for _ in 0..4 {
         r.append(&mut vec![F::from((rem % 256) as u64)]);
-        rem = rem/256;
+        rem /= 256;
     }
     r.try_into().unwrap()
 }
@@ -254,6 +254,7 @@ impl<F: FieldExt> RMD160Chip<F> {
     }
 
 
+    #[allow(clippy::too_many_arguments)]
     fn assign_next(
         &self,
         region: &mut Region<F>,
@@ -296,7 +297,7 @@ impl<F: FieldExt> RMD160Chip<F> {
         self.config.round_config.assign_cell(region, start_offset, &RoundGateConfig::d2(), dlimbs[2])?;
         self.config.round_config.assign_cell(region, start_offset, &RoundGateConfig::d3(), dlimbs[3])?;
 
-        let rol = previous.into_iter()
+        let rol = previous.iter()
             .map(|c| {
                 field_to_u32(&c.value)
             })
@@ -311,8 +312,8 @@ impl<F: FieldExt> RMD160Chip<F> {
         let rlimbs = u32_to_limbs(witness.r);
 
         let mut sum_r = rlimbs[0];
-        for i in 1..4 {
-            sum_r = sum_r + rlimbs[i] * F::from(1u64 << (8*i));
+        for (i, limb) in rlimbs.iter().copied().enumerate().skip(1) {
+            sum_r += limb * F::from(1u64 << (8*i));
         }
 
         assert!(sum_r == F::from(witness.r as u64));
@@ -454,13 +455,13 @@ impl<F: FieldExt> RMD160Chip<F> {
             |mut region| {
                 let mut r1 = start_buf.clone();
                 let mut start_offset = 0;
-                for round in 0..5 {
+                for (round, o) in O.iter().copied().enumerate() {
                     for index in 0..16 {
                         r1 = self.assign_next(
                             &mut region,
                             start_offset,
                             &r1,
-                            &self.rotate_inputs(inputs, O[round])[index],
+                            &self.rotate_inputs(inputs, o)[index],
                             round,
                             index,
                             &R,
@@ -481,13 +482,13 @@ impl<F: FieldExt> RMD160Chip<F> {
                 */
 
                 let mut r2 = start_buf.clone();
-                for round in 0..5 {
+                for (round, po) in PO.iter().copied().enumerate() {
                     for index in 0..16 {
                         r2 = self.assign_next(
                             &mut region,
                             start_offset,
                             &r2,
-                            &self.rotate_inputs(&inputs, PO[round])[index],
+                            &self.rotate_inputs(inputs, po)[index],
                             round,
                             index,
                             &PR,

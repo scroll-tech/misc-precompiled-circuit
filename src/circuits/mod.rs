@@ -113,6 +113,7 @@ impl CommonGateConfig {
     }
 
     /// Select between f and t: if cond then t else f
+    #[allow(clippy::too_many_arguments)]
     pub fn select<F:FieldExt, LC: LookupAssistChip<F>>(
         &self,
         region: &mut Region<F>,
@@ -124,9 +125,9 @@ impl CommonGateConfig {
         hint: u64,
     ) -> Result<Limb<F>, Error> {
         let result = if cond.value == F::zero() {
-            Limb::new(None, f.value.clone())
+            Limb::new(None, f.value)
         } else {
-            Limb::new(None, t.value.clone())
+            Limb::new(None, t.value)
         };
         let l = self.assign_line(region, lookup_assist_chip, offset,
             [
@@ -227,8 +228,7 @@ impl CommonGateConfig {
 
         // apply eqn: (val * val) - val = 0,
         // by: (ws[1] * ws[2] * cs[7]) + (ws[0] * cs[0]) = 0,
-        for i in 0..(limbs.len()) {
-            let lm = limbs[i].clone();
+        for lm in limbs.iter() {
             let _l = self.assign_line(
                 region,
                 lookup_assist_chip,
@@ -236,7 +236,7 @@ impl CommonGateConfig {
                 [
                     Some(lm.clone()),
                     Some(lm.clone()),
-                    Some(lm),
+                    Some(lm.clone()),
                     None,
                     None,
                     None,
@@ -274,19 +274,17 @@ impl CommonGateConfig {
         for i in 0..5 {
             let v = value[i].as_ref().map_or(F::zero(), |x| x.value);
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
-            value[i].clone().map(|x| {
+            if let Some(x) = value[i].clone() {
                 limbs.push(limb.clone());
-                x.cell.as_ref().map(|c| {
-                    region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap();
-                });
-            });
+                if let Some(c) = x.cell.as_ref() { region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap(); }
+            }
         }
         self.assign_cell(region, *offset, &CommonGateConfig::lookup_hint(), F::from(hint))?;
         self.assign_cell(region, *offset, &CommonGateConfig::lookup_ind(), F::from(
             if hint == 0 {0u64} else {1u64}
         ))?;
 
-        *offset = *offset+1;
+        *offset += 1;
         Ok(limbs)
     }
 
@@ -342,12 +340,10 @@ impl CommonGateConfig {
         for i in 0..6 {
             let v = value[i].as_ref().map_or(F::zero(), |x| x.value);
             let limb = self.assign_cell(region, *offset, &witnesses[i], v).unwrap();
-            value[i].clone().map(|x| {
+            if let Some(x) = value[i].clone() {
                 limbs.push(limb.clone());
-                x.cell.map(|c| {
-                    region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap();
-                });
-            });
+                if let Some(c) = x.cell { region.constrain_equal(limb.get_the_cell().cell(), c.cell()).unwrap(); }
+            }
         }
         for i in 0..9 {
             let v = coeffs[i].as_ref().map_or(F::zero(), |x| *x);
@@ -363,7 +359,7 @@ impl CommonGateConfig {
             lookup_assist_chip.provide_lookup_evidence(region, value[0].as_ref().unwrap().value, hint)?;
         };
 
-        *offset = *offset+1;
+        *offset += 1;
         Ok(limbs)
     }
 
@@ -376,14 +372,14 @@ impl CommonGateConfig {
     ) -> Result<Limb<F>, Error> {
         let l = self.assign_line(region, lookup_assist_chip, offset,
                 [
-                    Some(Limb::new(None, value.clone())),
+                    Some(Limb::new(None, *value)),
                     None,
                     None,
                     None,
                     None,
                     None,
                 ],
-                [Some(F::one()), None, None, None, None, None, None, None, Some(-value.clone())],
+                [Some(F::one()), None, None, None, None, None, None, None, Some(-*value)],
                 0
         )?;
         Ok(l[0].clone())
@@ -411,7 +407,7 @@ impl CommonGateConfig {
             lookup_assist_chip,
             offset,
             vec![(limb, F::one())],
-            Some(-constant.clone()),
+            Some(-*constant),
         )?;
         let r = self.assign_line(
             region,
@@ -484,7 +480,7 @@ impl CommonGateConfig {
             if inputs.len() <= 3 { // solve it in oneline
                 let result = result + constant.map_or(F::zero(), |x| x);
                 let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v.clone())).collect::<Vec<Option<F>>>();
+                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v)).collect::<Vec<Option<F>>>();
                 limbs.resize_with(3, || None);
                 coeffs.resize_with(3, || None);
                 limbs.append(&mut vec![Some(Limb::new(None, result)), Some(Limb::new(None, acc)), None]);
@@ -500,7 +496,7 @@ impl CommonGateConfig {
                 r = Some(l.get(l.len() - 2).unwrap().clone());
             } else {
                 let mut limbs = chunk.iter().map(|&(l, _v)| Some(l.clone())).collect::<Vec<Option<Limb<_>>>>();
-                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v.clone())).collect::<Vec<Option<F>>>();
+                let mut coeffs = chunk.iter().map(|&(_l, v)| Some(v)).collect::<Vec<Option<F>>>();
                 limbs.resize_with(4, | | None);
                 coeffs.resize_with(4, | | None);
                 limbs.append(&mut vec![Some(Limb::new(None, acc)), Some(Limb::new(None, result))]);

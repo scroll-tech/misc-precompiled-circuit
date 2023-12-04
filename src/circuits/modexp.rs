@@ -112,7 +112,7 @@ impl<F: FieldExt> ModExpChip<F> {
                     None,
                     None,
                     None,
-                    Some(F::from(number.limbs[i].value)),
+                    Some(number.limbs[i].value),
                     None,
                     None,
                 ],
@@ -303,7 +303,6 @@ impl<F: FieldExt> ModExpChip<F> {
         let ret = lhs.add(rhs);
         let limbs = ret
             .limbs
-            .to_vec()
             .into_iter()
             .enumerate()
             .map(|(i, l)| {
@@ -343,6 +342,7 @@ impl<F: FieldExt> ModExpChip<F> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn mod_native_mul(
         &self,
         region: &mut Region<F>,
@@ -763,7 +763,7 @@ impl<F: FieldExt> ModExpChip<F> {
         )?;
         let is_zero = self.number_is_zero(region, range_check_chip, offset, modulus)?;
         let modulus_mock: Number<F> =
-            self.select(region, range_check_chip, offset, &is_zero, &modulus, &one)?;
+            self.select(region, range_check_chip, offset, &is_zero, modulus, &one)?;
         let r: Number<F> =
             self.mod_mult_unsafe(region, range_check_chip, offset, lhs, rhs, &modulus_mock)?;
         let res = self.select(region, range_check_chip, offset, &is_zero, &r, &zero)?;
@@ -845,8 +845,8 @@ impl<F: FieldExt> ModExpChip<F> {
             range_check_chip,
             offset,
             &rem,
-            &lhs,
-            &rhs,
+            lhs,
+            rhs,
             &modulus,
             &quotient
         )?;
@@ -923,13 +923,13 @@ impl<F: FieldExt> ModExpChip<F> {
             region,
             range_check_chip,
             offset,
-            Number::from_bn(&BigUint::from(1 as u128)),
+            Number::from_bn(&BigUint::from(1_u128)),
             0,
         )?;
         let one = acc.clone();
         for limb in limbs.iter() {
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &acc, modulus)?;
-            let sval = self.select(region, range_check_chip, offset, &limb, &one, &base)?;
+            let sval = self.select(region, range_check_chip, offset, limb, &one, base)?;
             acc = self.mod_mult(region, range_check_chip, offset, &acc, &sval, modulus)?;
         }
         Ok(acc)
