@@ -101,9 +101,9 @@ pub(crate) const PO: [[usize; 16]; DIGEST_BUF_LEN] = [
     [12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11],
 ];
 
-pub fn compress(w: &Vec<u32>, values: Vec<u32>) -> Vec<u32> {
-    let mut rol1 = w.clone();
-    let mut rol2 = w.clone();
+pub fn compress(w: &[u32], values: Vec<u32>) -> Vec<u32> {
+    let mut rol1 = w.to_vec();
+    let mut rol2 = w.to_vec();
     let mut round = 0;
     for ((idxs, shift), offset) in O.iter().zip(R).zip(ROUNDS_OFFSET) {
         for limb_index in 0..16 {

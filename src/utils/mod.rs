@@ -49,7 +49,7 @@ pub fn u32_to_limbs<F: PrimeField>(v: u32) -> [F; 4] {
     let mut r = vec![];
     for _ in 0..4 {
         r.append(&mut vec![F::from((rem % 256) as u64)]);
-        rem = rem / 256;
+        rem /= 256;
     }
     r.try_into().unwrap()
 }

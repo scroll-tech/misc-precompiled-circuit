@@ -881,13 +881,13 @@ impl<F: PrimeField> RMD160Chip<F> {
             |mut region| {
                 let mut r1 = start_buf.clone();
                 let mut start_offset = 0;
-                for round in 0..5 {
+                for (round, o) in O.iter().copied().enumerate() {
                     for index in 0..16 {
                         r1 = self.assign_next(
                             &mut region,
                             start_offset,
                             &r1,
-                            &self.rotate_inputs(inputs, O[round])[index],
+                            &self.rotate_inputs(inputs, o)[index],
                             round,
                             index,
                             &R,
@@ -908,13 +908,13 @@ impl<F: PrimeField> RMD160Chip<F> {
                 */
 
                 let mut r2 = start_buf.clone();
-                for round in 0..5 {
+                for (round, po) in PO.iter().copied().enumerate() {
                     for index in 0..16 {
                         r2 = self.assign_next(
                             &mut region,
                             start_offset,
                             &r2,
-                            &self.rotate_inputs(&inputs, PO[round])[index],
+                            &self.rotate_inputs(inputs, po)[index],
                             round,
                             index,
                             &PR,
