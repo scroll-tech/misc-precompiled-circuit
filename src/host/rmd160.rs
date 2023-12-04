@@ -48,7 +48,7 @@ impl RMD160Atomic for u32 {
 }
 
 
-fn rol_modifier(round: usize, rol: &mut Vec<u32>, x: u32, offset: u32, shift: u32) {
+fn rol_modifier(round: usize, rol: &mut [u32], x: u32, offset: u32, shift: u32) {
     let v = match round {
         0 => u32::f(rol[1], rol[2], rol[3]),
         1 => u32::g(rol[1], rol[2], rol[3]),
@@ -104,11 +104,11 @@ pub(crate) const PO: [[usize; 16]; DIGEST_BUF_LEN] = [
     [12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11],
 ];
 
-pub fn compress(w: &Vec<u32>, values: Vec<u32>) -> Vec<u32> {
-    let mut rol1 = w.clone();
-    let mut rol2 = w.clone();
+pub fn compress(w: &[u32], values: Vec<u32>) -> Vec<u32> {
+    let mut rol1 = w.to_vec();
+    let mut rol2 = w.to_vec();
     let mut round = 0;
-    for ((idxs,shift), offset) in O.zip(R).zip(ROUNDS_OFFSET) {
+    for ((idxs,shift), offset) in O.into_iter().zip(R).zip(ROUNDS_OFFSET) {
         for limb_index in 0..16 {
             let idx = idxs[limb_index];
             rol_modifier(round, &mut rol1, values[idx], offset, shift[limb_index]);
@@ -117,7 +117,7 @@ pub fn compress(w: &Vec<u32>, values: Vec<u32>) -> Vec<u32> {
         round += 1;
     }
 
-    for ((idxs,shift), offset) in PO.zip(PR).zip(PROUNDS_OFFSET) {
+    for ((idxs,shift), offset) in PO.into_iter().zip(PR).zip(PROUNDS_OFFSET) {
         for limb_index in 0..16 {
             let idx = idxs[limb_index];
             rol_modifier(round-1, &mut rol2, values[idx], offset, shift[limb_index]);
