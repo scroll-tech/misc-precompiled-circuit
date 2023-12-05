@@ -36,17 +36,15 @@ pub fn u32_to_limbs<F: FieldExt>(v: u32) -> [F; 4] {
 pub fn cell_to_value<F: FieldExt>(cell: &AssignedCell<F, F>) -> F {
     //cell.value().map_or(0, |x| field_to_u32(x))
     let mut r = F::zero();
-    cell.value().map(|x| { r = *x });
+    cell.value().map(|x| r = *x);
     r
 }
-
-
 
 /* FIXME should not get value based on cell in new halo2 */
 pub fn cell_to_u32<F: FieldExt>(cell: &AssignedCell<F, F>) -> u32 {
     //cell.value().map_or(0, |x| field_to_u32(x))
     let mut r = 0;
-    cell.value().map(|x| { r = field_to_u32(x) });
+    cell.value().map(|x| r = field_to_u32(x));
     r
 }
 
@@ -138,5 +136,3 @@ macro_rules! value_for_assign {
         halo2_proofs::circuit::Value::known($x)
     };
 }
-
-

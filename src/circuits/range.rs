@@ -1,47 +1,38 @@
-use crate::utils::{
-    field_to_bn,
-    bn_to_field,
-};
+use crate::circuits::{LookupAssistChip, LookupAssistConfig};
+use crate::utils::{bn_to_field, field_to_bn};
 use halo2_gate_generator::{
-    customized_circuits,
-    table_item,
-    item_count,
-    customized_circuits_expand,
-    constant_from,
-    value_for_assign,
-    GateCell,
-    Limb,
+    constant_from, customized_circuits, customized_circuits_expand, item_count, table_item,
+    value_for_assign, GateCell, Limb,
 };
-use crate::circuits::{
-    LookupAssistConfig,
-    LookupAssistChip
-};
-use std::ops::Div;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::Region,
-    plonk::{
-        Fixed, Advice, Column, ConstraintSystem,
-        Error, Expression, Selector, VirtualCells
-    },
+    halo2curves::group::ff::PrimeField,
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Fixed, Selector, VirtualCells},
     poly::Rotation,
 };
-use std::marker::PhantomData;
 use num_bigint::BigUint;
+use std::marker::PhantomData;
+use std::ops::Div;
 
 /*
  * Customized gates range_check(target) with each limb less than 2^12
  * acc will be the sum of the target limbs and rem is the remaining limbs
  * of the target value.
  */
-customized_circuits!(RangeCheckConfig, 2, 3, 2, 0,
-   | limb   |  acc   | rem   | table | sel
-   | nil    |  acc_n | rem_n | nil   | sel_n
-);
+customized_circuits!(RangeCheckConfig, 2, 3, 2, 0, |limb| acc
+    | rem
+    | table
+    | sel
+    | nil
+    | acc_n
+    | rem_n
+    | nil
+    | sel_n);
 
 impl LookupAssistConfig for RangeCheckConfig {
     /// register a column (col) to be range checked by limb size (sz)
-    fn register<F: FieldExt> (
+    fn register<F: FieldExt>(
         &self,
         cs: &mut ConstraintSystem<F>,
         col: impl FnOnce(&mut VirtualCells<F>) -> Expression<F>,
@@ -55,14 +46,14 @@ impl LookupAssistConfig for RangeCheckConfig {
     }
 }
 
-pub struct RangeCheckChip<F:FieldExt> {
+pub struct RangeCheckChip<F: FieldExt> {
     config: RangeCheckConfig,
     offset: usize,
-    _marker: PhantomData<F>
+    _marker: PhantomData<F>,
 }
 
-impl<F:FieldExt> LookupAssistChip<F> for RangeCheckChip<F> {
-    fn provide_lookup_evidence (
+impl<F: FieldExt> LookupAssistChip<F> for RangeCheckChip<F> {
+    fn provide_lookup_evidence(
         &mut self,
         region: &mut Region<F>,
         value: F,
@@ -72,24 +63,26 @@ impl<F:FieldExt> LookupAssistChip<F> for RangeCheckChip<F> {
     }
 }
 
-
 impl<F: FieldExt> RangeCheckChip<F> {
     pub fn new(config: RangeCheckConfig) -> Self {
         RangeCheckChip {
             config,
-            offset:0,
+            offset: 0,
             _marker: PhantomData,
         }
     }
 
     pub fn configure(cs: &mut ConstraintSystem<F>) -> RangeCheckConfig {
-        let witness= [0; 3]
-                .map(|_|cs.advice_column());
+        let witness = [0; 3].map(|_| cs.advice_column());
         witness.map(|x| cs.enable_equality(x));
         let fixed = [0; 2].map(|_| cs.fixed_column());
-        let selector =[];
+        let selector = [];
 
-        let config = RangeCheckConfig { fixed, selector, witness };
+        let config = RangeCheckConfig {
+            fixed,
+            selector,
+            witness,
+        };
 
         // Range Check of all limbs
         //
@@ -105,10 +98,7 @@ impl<F: FieldExt> RangeCheckChip<F> {
             let rem_n = config.get_expr(meta, RangeCheckConfig::rem_n());
             let sel = config.get_expr(meta, RangeCheckConfig::sel());
 
-            vec![
-                sel * rem.clone() * (rem - rem_n - constant_from!(1)),
-            ]
-
+            vec![sel * rem.clone() * (rem - rem_n - constant_from!(1))]
         });
 
         // Second we make sure if the rem is not zero then
@@ -121,11 +111,10 @@ impl<F: FieldExt> RangeCheckChip<F> {
             let sel_n = config.get_expr(meta, RangeCheckConfig::sel_n());
 
             vec![
-                sel.clone() * (acc.clone() - limb - acc_n * constant_from!(1u64<<12) * sel_n),
+                sel.clone() * (acc.clone() - limb - acc_n * constant_from!(1u64 << 12) * sel_n),
                 sel.clone() * (constant_from!(1) - sel.clone()),
                 //(constant_from!(1) - sel) * acc, // if sel is 0 then acc must equal to 0
             ]
-
         });
         cs.create_gate("end with zero", |meta| {
             let sel = config.get_expr(meta, RangeCheckConfig::sel());
@@ -140,7 +129,7 @@ impl<F: FieldExt> RangeCheckChip<F> {
     }
 
     /// Make sure the (value, sz) pair is lookupable in the range_chip
-    pub fn assign_value_with_range (
+    pub fn assign_value_with_range(
         &mut self,
         region: &mut Region<F>,
         value: F,
@@ -151,8 +140,8 @@ impl<F: FieldExt> RangeCheckChip<F> {
         let mut cs = vec![];
         for _ in 0..sz {
             cs.push(bn_to_field(&bn));
-            let limb = bn.modpow(&BigUint::from(1u128), &BigUint::from(1u128<<12));
-            bn = (bn - limb.clone()).div(BigUint::from(1u128<<12));
+            let limb = bn.modpow(&BigUint::from(1u128), &BigUint::from(1u128 << 12));
+            bn = (bn - limb.clone()).div(BigUint::from(1u128 << 12));
             limbs.push(bn_to_field(&limb));
         }
         cs.reverse();
@@ -160,28 +149,42 @@ impl<F: FieldExt> RangeCheckChip<F> {
         for i in 0..sz {
             let limb = limbs.pop().unwrap();
             let acc = cs.pop().unwrap();
-            self.config.assign_cell(region, self.offset, &RangeCheckConfig::limb(), limb)?;
-            self.config.assign_cell(region, self.offset, &RangeCheckConfig::acc(), acc)?;
-            self.config.assign_cell(region, self.offset, &RangeCheckConfig::rem(), F::from_u128((sz-i) as u128))?;
-            self.config.assign_cell(region, self.offset, &RangeCheckConfig::sel(), F::one())?;
+            self.config
+                .assign_cell(region, self.offset, &RangeCheckConfig::limb(), limb)?;
+            self.config
+                .assign_cell(region, self.offset, &RangeCheckConfig::acc(), acc)?;
+            self.config.assign_cell(
+                region,
+                self.offset,
+                &RangeCheckConfig::rem(),
+                F::from_u128((sz - i) as u128),
+            )?;
+            self.config
+                .assign_cell(region, self.offset, &RangeCheckConfig::sel(), F::one())?;
             self.offset += 1;
         }
-        self.config.assign_cell(region, self.offset, &RangeCheckConfig::limb(), F::zero())?;
-        self.config.assign_cell(region, self.offset, &RangeCheckConfig::acc(), F::zero())?;
-        self.config.assign_cell(region, self.offset, &RangeCheckConfig::rem(), F::zero())?;
-        self.config.assign_cell(region, self.offset, &RangeCheckConfig::sel(), F::zero())?;
+        self.config
+            .assign_cell(region, self.offset, &RangeCheckConfig::limb(), F::zero())?;
+        self.config
+            .assign_cell(region, self.offset, &RangeCheckConfig::acc(), F::zero())?;
+        self.config
+            .assign_cell(region, self.offset, &RangeCheckConfig::rem(), F::zero())?;
+        self.config
+            .assign_cell(region, self.offset, &RangeCheckConfig::sel(), F::zero())?;
         self.offset += 1;
         Ok(())
     }
 
     /// initialize the table column from 1 to 2^12
     /// initialize needs to be called before using the range_chip
-    pub fn initialize(
-        &mut self,
-        region: &mut Region<F>,
-    ) -> Result<(), Error> {
+    pub fn initialize(&mut self, region: &mut Region<F>) -> Result<(), Error> {
         for i in 0..4096 {
-            self.config.assign_cell(region, i, &RangeCheckConfig::table(), F::from_u128(i as u128))?;
+            self.config.assign_cell(
+                region,
+                i,
+                &RangeCheckConfig::table(),
+                F::from_u128(i as u128),
+            )?;
         }
         self.offset = 0;
         self.assign_value_with_range(region, F::zero(), 25)?;
@@ -189,43 +192,35 @@ impl<F: FieldExt> RangeCheckChip<F> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use halo2_proofs::halo2curves::bn256::Fr;
     use halo2_proofs::dev::MockProver;
+    use halo2_proofs::halo2curves::bn256::Fr;
 
     use halo2_proofs::{
-        circuit::{Chip, Layouter, Region, SimpleFloorPlanner, AssignedCell},
-        plonk::{
-            Advice, Circuit, Column, ConstraintSystem, Error, VirtualCells,
-            Expression
-        },
+        circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner},
+        plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, VirtualCells},
         poly::Rotation,
     };
 
-    use super::{
-        RangeCheckChip,
-        RangeCheckConfig,
-    };
-    use crate::value_for_assign;
+    use super::{RangeCheckChip, RangeCheckConfig};
     use crate::circuits::LookupAssistConfig;
-
+    use crate::value_for_assign;
 
     #[derive(Clone, Debug)]
     pub struct HelperChipConfig {
-        limb: Column<Advice>
+        limb: Column<Advice>,
     }
 
     impl HelperChipConfig {
-        pub fn range_check_column (&self, cs: &mut VirtualCells<Fr>) -> Expression<Fr> {
+        pub fn range_check_column(&self, cs: &mut VirtualCells<Fr>) -> Expression<Fr> {
             cs.query_advice(self.limb, Rotation::cur())
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct HelperChip {
-        config: HelperChipConfig
+        config: HelperChipConfig,
     }
 
     impl Chip<Fr> for HelperChip {
@@ -243,17 +238,13 @@ mod tests {
 
     impl HelperChip {
         fn new(config: HelperChipConfig) -> Self {
-            HelperChip{
-                config,
-            }
+            HelperChip { config }
         }
 
         fn configure(cs: &mut ConstraintSystem<Fr>) -> HelperChipConfig {
             let limb = cs.advice_column();
             cs.enable_equality(limb);
-            HelperChipConfig {
-                limb,
-            }
+            HelperChipConfig { limb }
         }
 
         fn assign_value(
@@ -266,17 +257,15 @@ mod tests {
                 || format!("assign input"),
                 self.config.limb,
                 *offset,
-                || value_for_assign!(value)
+                || value_for_assign!(value),
             )?;
             *offset = *offset + 1;
             Ok(c)
         }
-
     }
 
     #[derive(Clone, Debug, Default)]
-    struct TestCircuit {
-    }
+    struct TestCircuit {}
 
     #[derive(Clone, Debug)]
     struct TestConfig {
@@ -299,12 +288,12 @@ mod tests {
             rangecheckconfig.register(
                 meta,
                 |c| helperconfig.range_check_column(c),
-                |_| Expression::Constant(Fr::from(4 as u64))
+                |_| Expression::Constant(Fr::from(4 as u64)),
             );
 
             Self::Config {
-               rangecheckconfig,
-               helperconfig,
+                rangecheckconfig,
+                helperconfig,
             }
         }
 
@@ -318,7 +307,7 @@ mod tests {
             layouter.assign_region(
                 || "range check test",
                 |mut region| {
-                    let v = Fr::from(1u64<<24 + 1);
+                    let v = Fr::from(1u64 << 24 + 1);
                     range_chip.initialize(&mut region)?;
                     range_chip.assign_value_with_range(&mut region, v, 4)?;
 
@@ -326,7 +315,7 @@ mod tests {
                     let mut offset = 0;
                     helper_chip.assign_value(&mut region, &mut offset, v)?;
                     Ok(())
-                }
+                },
             )?;
             Ok(())
         }
@@ -334,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_range_circuit() {
-        let test_circuit = TestCircuit {} ;
+        let test_circuit = TestCircuit {};
         let prover = MockProver::run(18, &test_circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
